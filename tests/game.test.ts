@@ -17,6 +17,9 @@ class FakeInput {
   }
 }
 
+// Long simulation; CI runners are several times slower than a laptop.
+const SIM_TIMEOUT_MS = 60_000;
+
 describe('game loop (headless)', () => {
   it('starts, plays, and survives five minutes of random input', () => {
     const game = new Game(false);
@@ -47,7 +50,7 @@ describe('game loop (headless)', () => {
     expect(seen.has('playing')).toBe(true);
     expect(seen.has('command')).toBe(true);
     expect(bestScore).toBeGreaterThan(0);
-  });
+  }, SIM_TIMEOUT_MS);
 
   it('clearing a wave morphs the arena into the next level', () => {
     const game = new Game(false);

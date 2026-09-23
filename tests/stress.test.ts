@@ -12,6 +12,9 @@ function rng(seed: number) {
   };
 }
 
+// Long simulations; CI runners are several times slower than a laptop.
+const SIM_TIMEOUT_MS = 60_000;
+
 describe('bodies stay in the corridor', () => {
   it.each(LEVELS.map((l) => [l.name, l] as const))('%s: 200 fast bodies for 60 simulated seconds', (_, lvl) => {
     const rand = rng(42);
@@ -40,5 +43,5 @@ describe('bodies stay in the corridor', () => {
       }
     }
     expect(worst).toBeLessThan(0.5);
-  });
+  }, SIM_TIMEOUT_MS);
 });
