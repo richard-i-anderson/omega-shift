@@ -38,7 +38,8 @@ function render(alpha: number): void {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  const shake = game.shakeOffset; // render-only; physics never sees it
+  ctx.setTransform(scale, 0, 0, scale, shake.x * scale, shake.y * scale);
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
 

@@ -3,7 +3,7 @@ import type { ForceField } from '../arena/field';
 import { N } from '../arena/shapes';
 import type { Bullet } from '../entities/bullet';
 import type { Enemy } from '../entities/enemies';
-import type { Particle } from '../entities/particles';
+import { COOL_STEPS, coolStep, paletteList, type Particle } from '../entities/particles';
 import type { Ship } from '../entities/ship';
 import { WORLD } from '../config';
 import { lerp, TAU } from '../math/vec';
@@ -281,20 +281,112 @@ export function drawBullets(ctx: CanvasRenderingContext2D, bullets: Bullet[], co
   noGlow(ctx);
 }
 
-export function drawParticles(ctx: CanvasRenderingContext2D, ps: Particle[], alpha = 1): void {
-  ctx.lineWidth = 1.5;
-  for (const p of ps) {
-    ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
-    ctx.strokeStyle = p.color;
-    const dx = Math.cos(p.angle) * p.len * 0.5;
-    const dy = Math.sin(p.angle) * p.len * 0.5;
-    const x = lerp(p.prevX, p.x, alpha);
-    const y = lerp(p.prevY, p.y, alpha);
-    ctx.beginPath();
-    ctx.moveTo(x - dx, y - dy);
-    ctx.lineTo(x + dx, y + dy);
+/**
+ * Explosion fragments are batched: one path per (colour, cooling step, alpha
+ * level, shard or spark), stroked with a small halo instead of shadowBlur, so a
+ * screen full of blasts costs a few dozen strokes rather than one per fragment.
+ * One halo pass only: on the software rasteriser each extra pass over ~400
+ * fragments cost about 1 ms at 2048×1536.
+ */
+const PARTICLE_ALPHA_LEVELS = 8;
+const PARTICLE_HALO = [{ extra: 4, alpha: 0.2 }];
+const particleBuckets = new Map<number, Particle[]>();
+/** A flash is three nested discs: [radius share, alpha]. */
+const FLASH_DISCS = [
+  [1, 0.16],
+  [0.62, 0.3],
+  [0.32, 0.9],
+] as const;
+
+function particleHalo(ctx: CanvasRenderingContext2D, width: number, alpha: number): void {
+  for (const h of PARTICLE_HALO) {
+    ctx.globalAlpha = alpha * h.alpha;
+    ctx.lineWidth = width + h.extra;
     ctx.stroke();
   }
+  ctx.globalAlpha = alpha;
+  ctx.lineWidth = width;
+  ctx.stroke();
+}
+
+export function drawParticles(ctx: CanvasRenderingContext2D, ps: Particle[], alpha = 1): void {
+  ctx.shadowBlur = 0;
+  for (const b of particleBuckets.values()) b.length = 0;
+  for (const p of ps) {
+    const f = Math.max(0, p.life / p.maxLife);
+    const x = lerp(p.prevX, p.x, alpha);
+    const y = lerp(p.prevY, p.y, alpha);
+    if (p.kind === 'flash') {
+      // A white disc with a soft edge, swelling slightly as it fades.
+      const a = f * f;
+      const r = p.len * (0.7 + 0.3 * (1 - f));
+      // A coloured bloom behind the white core.
+      ctx.fillStyle = p.palette.steps[COOL_STEPS - 1];
+      ctx.globalAlpha = a * 0.22;
+      ctx.beginPath();
+      ctx.arc(x, y, r * 1.35, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      for (const [rs, as] of FLASH_DISCS) {
+        ctx.globalAlpha = a * as;
+        ctx.beginPath();
+        ctx.arc(x, y, r * rs, 0, TAU);
+        ctx.fill();
+      }
+      continue;
+    }
+    if (p.kind === 'ring') {
+      // Fast out, easing to its full radius; thins and fades as it goes.
+      const t = 1 - f;
+      const r = p.len * (1 - (1 - t) ** 3);
+      ctx.strokeStyle = p.palette.steps[coolStep(p)];
+      ctx.beginPath();
+      ctx.arc(x, y, Math.max(0.5, r), 0, TAU);
+      particleHalo(ctx, 1 + 2.5 * f, f ** 1.5);
+      continue;
+    }
+    const spark = p.kind === 'spark';
+    // Fragments hold their brightness, then fade out late in life.
+    const level = Math.ceil(Math.min(1, f * 1.5) * PARTICLE_ALPHA_LEVELS);
+    if (level <= 0) continue;
+    // Sparks run one step hotter than shards.
+    const step = spark ? Math.max(0, coolStep(p) - 1) : coolStep(p);
+    const key = (((p.palette.id * COOL_STEPS + step) * (PARTICLE_ALPHA_LEVELS + 1) + level) << 1) | (spark ? 1 : 0);
+    let list = particleBuckets.get(key);
+    if (!list) particleBuckets.set(key, (list = []));
+    list.push(p);
+  }
+  // Butt caps: round ones cost noticeably more on hundreds of tiny segments.
+  const cap = ctx.lineCap;
+  ctx.lineCap = 'butt';
+  for (const [key, list] of particleBuckets) {
+    if (!list.length) continue;
+    const spark = (key & 1) === 1;
+    const rest = key >> 1;
+    const level = rest % (PARTICLE_ALPHA_LEVELS + 1);
+    const cs = Math.floor(rest / (PARTICLE_ALPHA_LEVELS + 1));
+    const palette = paletteList[Math.floor(cs / COOL_STEPS)];
+    ctx.strokeStyle = palette.steps[cs % COOL_STEPS];
+    ctx.beginPath();
+    for (const p of list) {
+      const x = lerp(p.prevX, p.x, alpha);
+      const y = lerp(p.prevY, p.y, alpha);
+      if (spark) {
+        // A streak trailing behind the spark, shrinking as it slows and burns out.
+        const v = Math.hypot(p.vx, p.vy) || 1;
+        const l = p.len * (0.35 + 0.65 * (p.life / p.maxLife));
+        ctx.moveTo(x, y);
+        ctx.lineTo(x - (p.vx / v) * l, y - (p.vy / v) * l);
+      } else {
+        const dx = Math.cos(p.angle) * p.len * 0.5;
+        const dy = Math.sin(p.angle) * p.len * 0.5;
+        ctx.moveTo(x - dx, y - dy);
+        ctx.lineTo(x + dx, y + dy);
+      }
+    }
+    particleHalo(ctx, spark ? 1.5 : 2, level / PARTICLE_ALPHA_LEVELS);
+  }
+  ctx.lineCap = cap;
   ctx.globalAlpha = 1;
 }
 

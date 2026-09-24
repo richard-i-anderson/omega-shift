@@ -46,6 +46,60 @@ export const SCORE = {
   extraLifeEvery: 40000,
 } as const;
 
+// Explosions (src/entities/particles.ts). A blast is long tumbling shards,
+// short fast sparks (streaks along their motion), an expanding shockwave ring
+// and a brief central flash. Fragments start white-hot and cool to the blast's
+// colour over their life. Presets grow with the danger of what blew up:
+// mine < droid < command < death < ship. Speeds px/s, times s, lengths px.
+export const EXPLOSION = {
+  // Live particles are capped; the oldest are dropped first.
+  maxParticles: 2000,
+  // Share of a fragment's life spent white-hot before it starts to cool.
+  hotShare: 0.15,
+  // Screen shake: a render-only offset (never physics), only for blasts with
+  // `shake` > 0 (the ship and death ships). Peak offset in px, capped at
+  // `max`, decaying as exp(−decay·t).
+  shake: { enabled: true, max: 12, decay: 7 },
+  presets: {
+    // High launch speed with heavy drag: a violent burst that then hangs.
+    // A fragment travels at most speed / drag px.
+    mine: {
+      shards: 12, sparks: 12, speed: 240, sparkSpeed: 460, len: [6, 12], sparkLen: [6, 10],
+      life: [0.35, 0.75], drag: 3.2, spin: 12, curl: 0,
+      ring: { radius: 44, life: 0.28 }, flash: { radius: 22, life: 0.1 }, shake: 0,
+    },
+    droid: {
+      shards: 26, sparks: 20, speed: 300, sparkSpeed: 580, len: [7, 16], sparkLen: [7, 12],
+      life: [0.5, 1.05], drag: 2.8, spin: 12, curl: 0,
+      ring: { radius: 78, life: 0.35 }, flash: { radius: 36, life: 0.12 }, shake: 0,
+    },
+    command: {
+      shards: 36, sparks: 28, speed: 340, sparkSpeed: 650, len: [8, 19], sparkLen: [8, 14],
+      life: [0.6, 1.25], drag: 2.5, spin: 13, curl: 0,
+      ring: { radius: 105, life: 0.42 }, flash: { radius: 46, life: 0.14 }, shake: 0,
+    },
+    death: {
+      shards: 54, sparks: 40, speed: 400, sparkSpeed: 740, len: [9, 22], sparkLen: [9, 16],
+      life: [0.7, 1.45], drag: 2.3, spin: 14, curl: 0,
+      ring: { radius: 145, life: 0.5 }, flash: { radius: 62, life: 0.17 }, shake: 6,
+    },
+    ship: {
+      shards: 72, sparks: 56, speed: 440, sparkSpeed: 820, len: [10, 24], sparkLen: [10, 18],
+      life: [0.9, 1.8], drag: 2.0, spin: 14, curl: 0,
+      ring: { radius: 190, life: 0.6 }, flash: { radius: 80, life: 0.22 }, shake: 10,
+    },
+    // Hyperspace: a cyan swirl. `curl` turns each fragment's velocity
+    // (rad/s), so the fragments spiral instead of flying straight.
+    hyper: {
+      shards: 16, sparks: 14, speed: 210, sparkSpeed: 340, len: [6, 12], sparkLen: [6, 10],
+      life: [0.35, 0.7], drag: 3.5, spin: 8, curl: 7,
+      ring: { radius: 48, life: 0.3 }, flash: { radius: 22, life: 0.09 }, shake: 0,
+    },
+  },
+} as const;
+
+export type BlastKind = keyof typeof EXPLOSION.presets;
+
 // H jumps the ship: to the next chamber clockwise on chambered levels,
 // otherwise to a random spot on the track.
 export const HYPERSPACE = {

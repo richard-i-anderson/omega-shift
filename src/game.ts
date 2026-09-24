@@ -2,9 +2,20 @@ import { Arena } from './arena/arena';
 import { DTHETA } from './arena/field';
 import { Bullet } from './entities/bullet';
 import { isHunter, isMine, makeDroid, makeMine, promote, updateEnemy, type Enemy, type EnemyWorld } from './entities/enemies';
-import { explode, updateParticles, type Particle } from './entities/particles';
+import { spawnBlast, updateParticles, type Particle } from './entities/particles';
 import { Ship } from './entities/ship';
-import { ENEMY, HYPERSPACE, LEVEL_CLEAR_SEC, LEVEL_TRANSITION_SEC, SCORE, SHIP, START_LIVES, WORLD } from './config';
+import {
+  ENEMY,
+  EXPLOSION,
+  HYPERSPACE,
+  LEVEL_CLEAR_SEC,
+  LEVEL_TRANSITION_SEC,
+  SCORE,
+  SHIP,
+  START_LIVES,
+  WORLD,
+  type BlastKind,
+} from './config';
 import { MAX_PENDING_EVENTS, type GameEvent } from './events';
 import type { Input } from './input';
 import { LEVELS, levelFor, validateLevel } from './levels/levels';
@@ -26,6 +37,16 @@ const DROID_SPAWN_THETA = 0;
 /** Pixels between droids along the track when a wave spawns. */
 const DROID_SPACING = 50;
 const HYPER_COLOR = '#35e0ff';
+/** The ship's blast cools from white-hot to fiery orange. */
+const SHIP_BLAST_COLOR = '#ff9a3c';
+/** Which explosion preset each enemy gets. */
+const ENEMY_BLAST: Record<Enemy['kind'], BlastKind> = {
+  droid: 'droid',
+  command: 'command',
+  death: 'death',
+  photon: 'mine',
+  vapor: 'mine',
+};
 
 export class Game {
   state: GameState = 'title';
@@ -45,6 +66,8 @@ export class Game {
   enemyBullets: Bullet[] = [];
   enemies: Enemy[] = [];
   particles: Particle[] = [];
+  /** Screen-shake amplitude in px, decaying; render-only (see `shakeOffset`). */
+  shake = 0;
   /** What happened since the browser layer last drained this (it plays sounds for them). */
   events: GameEvent[] = [];
 
@@ -85,6 +108,19 @@ export class Game {
   }
 
   /**
+   * How far to offset the whole picture for screen shake. A render-only
+   * wobble from a few sines of game time; nothing in the simulation moves.
+   */
+  get shakeOffset(): { x: number; y: number } {
+    if (!this.shake || this.paused || !EXPLOSION.shake.enabled) return { x: 0, y: 0 };
+    const t = this.time;
+    return {
+      x: this.shake * (0.6 * Math.sin(t * 97) + 0.4 * Math.sin(t * 151 + 1)),
+      y: this.shake * (0.6 * Math.sin(t * 89 + 2) + 0.4 * Math.sin(t * 137 + 3)),
+    };
+  }
+
+  /**
    * Remember every moving thing's current position as its previous one. Called
    * before each step, so the renderer can draw in between the last two states.
    */
@@ -120,6 +156,7 @@ export class Game {
     this.arena.update(dt);
     this.hudT += dt;
     updateParticles(this.particles, dt);
+    this.shake = this.shake > 0.05 ? this.shake * Math.exp(-EXPLOSION.shake.decay * dt) : 0;
 
     switch (this.state) {
       case 'title':
@@ -283,14 +320,14 @@ export class Game {
   }
 
   private jumpShip(ship: Ship, x: number, y: number): void {
-    explode(this.particles, ship.x, ship.y, HYPER_COLOR, 12, 120);
+    this.blast('hyper', ship.x, ship.y, HYPER_COLOR);
     ship.x = x;
     ship.y = y;
     ship.vx = 0;
     ship.vy = 0;
     ship.snapshot(); // don't draw it streaking across the arena
     ship.invuln = Math.max(ship.invuln, HYPERSPACE.invuln);
-    explode(this.particles, x, y, HYPER_COLOR, 12, 120);
+    this.blast('hyper', x, y, HYPER_COLOR);
   }
 
   private updateShipAndShots(dt: number, input: Input): void {
@@ -418,9 +455,16 @@ export class Game {
 
   private killEnemy(e: Enemy): void {
     e.dead = true;
-    explode(this.particles, e.x, e.y, ENEMY_COLORS[e.kind], isMine(e) ? 8 : 16);
+    this.blast(ENEMY_BLAST[e.kind], e.x, e.y, ENEMY_COLORS[e.kind]);
     this.addScore(SCORE[e.kind]);
     this.emit({ type: 'enemyKilled', kind: e.kind, x: e.x, y: e.y });
+  }
+
+  /** An explosion of preset `kind` at (x, y), cooling to `color`; big ones shake the screen. */
+  private blast(kind: BlastKind, x: number, y: number, color: string): void {
+    spawnBlast(this.particles, kind, x, y, color);
+    const shake = EXPLOSION.presets[kind].shake;
+    if (shake > 0) this.shake = Math.min(EXPLOSION.shake.max, Math.max(this.shake, shake) + shake * 0.25);
   }
 
   private addScore(points: number): void {
@@ -434,7 +478,7 @@ export class Game {
 
   private killShip(): void {
     const ship = this.ship!;
-    explode(this.particles, ship.x, ship.y, '#ffffff', 30, 220);
+    this.blast('ship', ship.x, ship.y, SHIP_BLAST_COLOR);
     this.ship = null;
     this.bullets = [];
     this.lives--;
@@ -449,7 +493,7 @@ export class Game {
   }
 
   private levelCleared(): void {
-    for (const e of this.enemies) explode(this.particles, e.x, e.y, ENEMY_COLORS[e.kind], 6);
+    for (const e of this.enemies) this.blast(ENEMY_BLAST[e.kind], e.x, e.y, ENEMY_COLORS[e.kind]);
     this.enemies = [];
     this.enemyBullets = [];
     const next = this.levelIndex + 1;
