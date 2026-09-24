@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { ambientDanger, dangerLevel } from '../src/audio/danger';
-import { AudioEngine } from '../src/audio/engine';
+import { ambientDanger, dangerLevel, remainingFraction, type Ambient, type Danger } from '../src/audio/danger';
+import { AudioEngine, pulseSettings } from '../src/audio/engine';
+import { crushCurve } from '../src/audio/synth';
 import { SOUND, WORLD } from '../src/config';
 import type { EnemyKind } from '../src/entities/enemies';
 import type { GameEvent } from '../src/events';
 import { Game } from '../src/game';
+import { LEVELS } from '../src/levels/levels';
 import type { Input } from '../src/input';
 
 class FakeInput {
@@ -116,12 +118,80 @@ describe('danger level', () => {
   });
 
   it('is silent outside a live wave', () => {
-    const enemies = [{ kind: 'death', dead: false }] as unknown as Parameters<typeof ambientDanger>[0]['enemies'];
-    expect(ambientDanger({ state: 'playing', paused: false, enemies })).toBe('death');
-    expect(ambientDanger({ state: 'playing', paused: true, enemies })).toBe('none');
-    for (const state of ['title', 'levelClear', 'gameOver'] as const) {
-      expect(ambientDanger({ state, paused: false, enemies })).toBe('none');
+    const enemies = es('death');
+    const at = (state: Game['state'], paused = false) => ambientDanger({ state, paused, enemies, levelIndex: 0 });
+    expect(at('playing').danger).toBe('death');
+    expect(at('playing', true).danger).toBe('none');
+    for (const state of ['title', 'levelClear', 'gameOver'] as const) expect(at(state).danger).toBe('none');
+  });
+
+  it('drones during the wave and the level cards, and goes quiet on pause, title and game over', () => {
+    const at = (state: Game['state'], paused = false) => ambientDanger({ state, paused, enemies: [], levelIndex: 0 }).bed;
+    expect(at('playing')).toBe('play');
+    expect(at('levelClear')).toBe('play');
+    expect(at('playing', true)).toBe('off');
+    expect(at('gameOver')).toBe('off');
+    expect(at('title')).toBe('title');
+  });
+
+  it('counts the fraction of the wave still alive, ignoring mines and the dead', () => {
+    const n = LEVELS[0].droids;
+    expect(remainingFraction(es(...Array<EnemyKind>(n).fill('droid')), 0)).toBe(1);
+    expect(remainingFraction([...es('droid', 'command', 'photon', 'vapor'), { kind: 'death', dead: true }], 0)).toBeCloseTo(2 / n);
+    expect(remainingFraction([], 0)).toBe(0);
+    // Later cycles have bigger waves (def.droids + 2 per cycle).
+    expect(remainingFraction(es('droid'), LEVELS.length)).toBeCloseTo(1 / (n + 2));
+  });
+});
+
+describe('danger pulse', () => {
+  const kinds = ['droid', 'command', 'death'] as const;
+  const fractions = [1, 0.75, 0.5, 0.25, 0];
+
+  it('gets louder, higher and faster with danger', () => {
+    for (const r of fractions) {
+      for (let i = 1; i < kinds.length; i++) {
+        const lo = pulseSettings(kinds[i - 1], r);
+        const hi = pulseSettings(kinds[i], r);
+        expect(hi.gain, `${kinds[i]} gain at ${r}`).toBeGreaterThan(lo.gain);
+        expect(hi.rate, `${kinds[i]} rate at ${r}`).toBeGreaterThan(lo.rate);
+        expect(hi.freq).toBeGreaterThan(lo.freq);
+      }
     }
+  });
+
+  it('a lower danger never outdoes a higher one, however thin the wave', () => {
+    for (let i = 1; i < kinds.length; i++) {
+      const loMax = pulseSettings(kinds[i - 1], 0);
+      const hiMin = pulseSettings(kinds[i], 1);
+      expect(hiMin.gain).toBeGreaterThan(loMax.gain);
+      expect(hiMin.rate).toBeGreaterThan(loMax.rate);
+    }
+  });
+
+  it('speeds up and gets louder as the wave thins out', () => {
+    for (const k of kinds) {
+      for (let i = 1; i < fractions.length; i++) {
+        const before = pulseSettings(k, fractions[i - 1]);
+        const after = pulseSettings(k, fractions[i]);
+        expect(after.rate).toBeGreaterThan(before.rate);
+        expect(after.gain).toBeGreaterThanOrEqual(before.gain);
+      }
+    }
+  });
+});
+
+describe('bit-crush curve', () => {
+  it('is odd, monotone, clipped to ±1 and quantised to the bit depth', () => {
+    const bits = SOUND.crush.bits;
+    const c = crushCurve(bits, 1025);
+    const step = 1 / 2 ** (bits - 1);
+    expect(c[0]).toBe(-1);
+    expect(c[c.length - 1]).toBe(1);
+    expect(c[512]).toBe(0);
+    for (let i = 1; i < c.length; i++) expect(c[i]).toBeGreaterThanOrEqual(c[i - 1]);
+    for (const v of c) expect(Math.abs(v / step - Math.round(v / step))).toBeLessThan(1e-6);
+    expect(new Set(c).size).toBe(2 ** bits + 1);
   });
 });
 
@@ -180,11 +250,14 @@ class FakeContext {
   state = 'running';
   destination = new FakeNode();
   oscillators = 0;
+  sources = 0;
   createOscillator() {
     this.oscillators++;
+    this.sources++;
     return Object.assign(new FakeSource(), { type: 'sine', frequency: new FakeParam() });
   }
   createBufferSource() {
+    this.sources++;
     return Object.assign(new FakeSource(), { buffer: null, loop: false });
   }
   createGain() {
@@ -192,6 +265,9 @@ class FakeContext {
   }
   createBiquadFilter() {
     return Object.assign(new FakeNode(), { type: 'lowpass', frequency: new FakeParam(), Q: new FakeParam() });
+  }
+  createWaveShaper() {
+    return Object.assign(new FakeNode(), { curve: null as Float32Array | null, oversample: 'none' });
   }
   createDynamicsCompressor() {
     return Object.assign(new FakeNode(), { threshold: new FakeParam(), ratio: new FakeParam() });
@@ -238,18 +314,68 @@ const ALL_EVENTS: GameEvent[] = [
 ];
 
 describe('audio engine (fake Web Audio)', () => {
+  const amb = (danger: Danger, bed: Ambient['bed'] = 'play', remaining = 1): Ambient => ({ danger, remaining, bed });
+
   it('builds its voices and plays every event without illegal scheduling', () => {
     const { ctx, engine } = fakeEngine();
-    engine.updateAmbient('droid', false); // before the context exists
+    engine.updateAmbient(amb('droid'), false); // before the context exists
     engine.unlock();
     for (const e of ALL_EVENTS) {
       ctx.currentTime += 0.1; // past the field-hit throttle
+      const n = ctx.sources;
       engine.play(e);
+      expect(ctx.sources - n, JSON.stringify(e)).toBeGreaterThan(0);
     }
     for (const d of ['none', 'droid', 'command', 'death', 'none'] as const) {
-      ctx.currentTime += 0.5;
-      engine.updateAmbient(d, d === 'command');
+      for (const r of [1, 0.5, 0]) {
+        ctx.currentTime += 0.5;
+        engine.updateAmbient(amb(d, 'play', r), d === 'command');
+      }
     }
+    for (const bed of ['off', 'title', 'play', 'off'] as const) {
+      ctx.currentTime += 0.5;
+      engine.updateAmbient(amb('none', bed), false);
+    }
+  });
+
+  it('ambient voices run continuously and are not rebuilt per frame', () => {
+    const { ctx, engine } = fakeEngine();
+    engine.unlock();
+    const n = ctx.sources;
+    expect(n).toBeGreaterThan(0);
+    for (let i = 0; i < 100; i++) {
+      ctx.currentTime += 1 / 60;
+      engine.updateAmbient(amb(i < 50 ? 'droid' : 'death', i % 20 < 10 ? 'play' : 'off', 1 - i / 100), i % 2 === 0);
+    }
+    expect(ctx.sources).toBe(n);
+  });
+
+  it('plays the attract jingle on the title, soon after unlocking and then every 20 s', () => {
+    const { ctx, engine } = fakeEngine();
+    engine.unlock();
+    const jingles: number[] = [];
+    let n = ctx.sources;
+    for (let t = 0; t < 45; t += 0.05) {
+      ctx.currentTime = t;
+      engine.updateAmbient(amb('none', 'title'), false);
+      if (ctx.sources > n) jingles.push(t);
+      n = ctx.sources;
+    }
+    expect(jingles.length).toBe(3);
+    expect(jingles[0]).toBeCloseTo(SOUND.attract.first, 1);
+    expect(jingles[1] - jingles[0]).toBeCloseTo(SOUND.attract.every, 1);
+    // Not while playing, and not while muted.
+    for (let t = 45; t < 90; t += 0.05) {
+      ctx.currentTime = t;
+      engine.updateAmbient(amb('droid', 'play'), false);
+    }
+    expect(ctx.sources).toBe(n);
+    engine.setMuted(true);
+    for (let t = 90; t < 130; t += 0.05) {
+      ctx.currentTime = t;
+      engine.updateAmbient(amb('none', 'title'), false);
+    }
+    expect(ctx.sources).toBe(n);
   });
 
   it('throttles field hits per source', () => {

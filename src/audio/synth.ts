@@ -147,8 +147,13 @@ function fadeTo(ctx: BaseAudioContext, p: AudioParam, value: number, fadeSec: nu
   p.setTargetAtTime(value, now, Math.max(fadeSec, 0.001) / 3);
 }
 
+/** The danger pulse; `set` moves its volume and LFO rate (the tempo) together. */
+export interface PulseVoice {
+  set(level: number, rate: number, fadeSec: number): void;
+}
+
 /** The background pulse: an oscillator whose pitch and volume follow one LFO. */
-export function pulseVoice(ctx: BaseAudioContext, dest: AudioNode, spec: PulseSpec): LoopVoice {
+export function pulseVoice(ctx: BaseAudioContext, dest: AudioNode, spec: PulseSpec): PulseVoice {
   const osc = ctx.createOscillator();
   osc.type = spec.wave;
   osc.frequency.value = spec.freq;
@@ -173,7 +178,68 @@ export function pulseVoice(ctx: BaseAudioContext, dest: AudioNode, spec: PulseSp
   head.connect(amp).connect(level).connect(dest);
   osc.start();
   lfo.start();
-  return { setLevel: (on, fadeSec) => fadeTo(ctx, level.gain, on ? spec.gain : 0, fadeSec) };
+  return {
+    set: (lvl, rate, fadeSec) => {
+      fadeTo(ctx, level.gain, lvl, fadeSec);
+      fadeTo(ctx, lfo.frequency, Math.max(rate, 0.01), fadeSec);
+    },
+  };
+}
+
+/** The always-on cabinet hum: detuned oscillators beating against each other. */
+export interface DroneSpec {
+  wave: OscWave;
+  /** One oscillator per entry; a small detune makes them beat at the difference, Hz. */
+  freqs: readonly number[];
+  /** Gain per oscillator. */
+  gain: number;
+  /** Resonant lowpass centre, Hz; a slow sine LFO sweeps it by ± sweepDepth. */
+  cutoff: number;
+  q: number;
+  sweepRate: number;
+  sweepDepth: number;
+}
+
+/** Detuned oscillators through a slowly sweeping resonant lowpass. */
+export function droneVoice(ctx: BaseAudioContext, dest: AudioNode, spec: DroneSpec): LoopVoice {
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = spec.cutoff;
+  filter.Q.value = spec.q;
+  const lfo = ctx.createOscillator();
+  lfo.type = 'sine';
+  lfo.frequency.value = spec.sweepRate;
+  const sweepAmt = ctx.createGain();
+  sweepAmt.gain.value = spec.sweepDepth;
+  lfo.connect(sweepAmt).connect(filter.frequency);
+  lfo.start();
+  for (const f of spec.freqs) {
+    const osc = ctx.createOscillator();
+    osc.type = spec.wave;
+    osc.frequency.value = f;
+    const g = ctx.createGain();
+    g.gain.value = spec.gain;
+    osc.connect(g).connect(filter);
+    osc.start();
+  }
+  const level = ctx.createGain();
+  level.gain.value = 0;
+  filter.connect(level).connect(dest);
+  return { setLevel: (on, fadeSec) => fadeTo(ctx, level.gain, on ? 1 : 0, fadeSec) };
+}
+
+/**
+ * A WaveShaper curve that rounds the signal to `bits` of resolution: the
+ * stair-stepped grit of an 8-bit DAC. Inputs past ±1 clip to ±1.
+ */
+export function crushCurve(bits: number, n = 4096): Float32Array<ArrayBuffer> {
+  const steps = 2 ** (bits - 1);
+  const curve = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1;
+    curve[i] = Math.round(x * steps) / steps;
+  }
+  return curve;
 }
 
 /** Continuous filtered noise (the thrust rumble). */

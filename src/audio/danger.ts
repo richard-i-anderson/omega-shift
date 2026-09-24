@@ -1,10 +1,22 @@
 import type { Enemy } from '../entities/enemies';
 import type { GameState } from '../game';
+import { levelFor } from '../levels/levels';
 
 /** How threatening the arena is right now; sets the background pulse. */
 export type Danger = 'none' | 'droid' | 'command' | 'death';
 
 export const DANGER_ORDER: readonly Danger[] = ['none', 'droid', 'command', 'death'];
+
+/** Which background bed plays: the drone during play, the attract jingle on the title, or nothing. */
+export type Bed = 'off' | 'title' | 'play';
+
+/** Everything the background sound follows, worked out from the `Game` once per frame. */
+export interface Ambient {
+  danger: Danger;
+  /** Fraction of the wave's ships still alive, 0..1; the pulse speeds up as it falls. */
+  remaining: number;
+  bed: Bed;
+}
 
 /** The most dangerous enemy alive. Mines don't count: they don't move. */
 export function dangerLevel(enemies: readonly Pick<Enemy, 'kind' | 'dead'>[]): Danger {
@@ -17,7 +29,36 @@ export function dangerLevel(enemies: readonly Pick<Enemy, 'kind' | 'dead'>[]): D
   return DANGER_ORDER[rank];
 }
 
-/** The pulse only plays during a live wave: silent on the title, level cards, pause and game over. */
-export function ambientDanger(g: { state: GameState; paused: boolean; enemies: readonly Enemy[] }): Danger {
-  return g.state === 'playing' && !g.paused ? dangerLevel(g.enemies) : 'none';
+/**
+ * Live droids, command and death ships as a fraction of the wave's size. The
+ * wave size mirrors `Game.spawnWave` (`def.droids + 2 * cycle`).
+ */
+export function remainingFraction(enemies: readonly Pick<Enemy, 'kind' | 'dead'>[], levelIndex: number): number {
+  const { def, cycle } = levelFor(levelIndex);
+  const wave = def.droids + 2 * cycle;
+  let alive = 0;
+  for (const e of enemies) if (!e.dead && DANGER_ORDER.includes(e.kind as Danger)) alive++;
+  return wave > 0 ? Math.min(1, alive / wave) : 0;
+}
+
+interface AmbientSource {
+  state: GameState;
+  paused: boolean;
+  levelIndex: number;
+  enemies: readonly Pick<Enemy, 'kind' | 'dead'>[];
+}
+
+/**
+ * The background sound for this frame. The pulse only plays during a live wave
+ * (silent on the title, level cards, pause and game over); the drone plays
+ * during the wave and the level cards; the title gets the attract jingle.
+ */
+export function ambientDanger(g: AmbientSource): Ambient {
+  const live = g.state === 'playing' && !g.paused;
+  const bed: Bed = g.paused ? 'off' : g.state === 'title' ? 'title' : g.state === 'gameOver' ? 'off' : 'play';
+  return {
+    danger: live ? dangerLevel(g.enemies) : 'none',
+    remaining: live ? remainingFraction(g.enemies, g.levelIndex) : 1,
+    bed,
+  };
 }
