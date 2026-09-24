@@ -113,7 +113,7 @@ export const STARS = {
   count: 250,
   seed: 1981,
   // Base alpha range, before twinkle and reactions.
-  minAlpha: 0.35,
+  minAlpha: 0.45,
   maxAlpha: 0.8,
   // Nothing is ever drawn brighter than this, so stars stay below bullets.
   maxDrawAlpha: 0.85,
@@ -121,10 +121,10 @@ export const STARS = {
   // reads as a bullet.
   whiteBigCap: 0.55,
   // Size shares: the rest are 1 px.
-  size2Share: 0.32,
-  size3Share: 0.08,
+  size2Share: 0.4,
+  size3Share: 0.12,
   // Share of stars tinted (cyan, magenta, amber, violet, white); the rest are pale blue-grey.
-  tintShare: 0.5,
+  tintShare: 0.7,
   // Flicker: alpha = base × (1 − depth + depth·sin(rate·t + phase)).
   flickerDepth: 0.3,
   minRate: 1.5,
@@ -136,7 +136,7 @@ export const STARS = {
   twinklePower: 8,
   // Share of stars that are bright sparklers: 2 px, tinted, base ≥ 0.7, and a
   // four-point cross whose arms (up to `sparkleArm` px) grow as they twinkle.
-  sparkleShare: 0.07,
+  sparkleShare: 0.1,
   sparkleArm: 5,
   // Parallax layers, far to near: drift speed (px/s) and share of stars.
   layerSpeeds: [4, 9, 18],
@@ -216,17 +216,17 @@ export const SOUND = {
   fieldHit: {
     // An electric "bzzt": a buzzy square, pitch dropping fast, with a crackle.
     ship: [
-      { wave: 'square', freq: 220, freqEnd: 60, decay: 0.2, gain: 0.45, filter: { type: 'lowpass', freq: 4000, freqEnd: 800 } },
-      { wave: 'noise', decay: 0.07, gain: 0.25, filter: { type: 'highpass', freq: 1800 } },
+      { wave: 'square', freq: 220, freqEnd: 60, decay: 0.2, gain: 0.6, filter: { type: 'lowpass', freq: 4000, freqEnd: 800 } },
+      { wave: 'noise', decay: 0.07, gain: 0.35, filter: { type: 'highpass', freq: 1800 } },
     ],
-    // Thin and sharp; shots hit walls often, so a little quieter.
-    shot: [{ wave: 'square', freq: 900, freqEnd: 280, decay: 0.06, gain: 0.3 }],
+    // Thin and sharp; shots hit walls often, so a little quieter than the ship.
+    shot: [{ wave: 'square', freq: 900, freqEnd: 280, decay: 0.06, gain: 0.55 }],
     enemy: [
-      { wave: 'sawtooth', freq: 170, freqEnd: 50, decay: 0.16, gain: 0.4 },
-      { wave: 'noise', decay: 0.04, gain: 0.15, filter: { type: 'highpass', freq: 2500 } },
+      { wave: 'sawtooth', freq: 170, freqEnd: 50, decay: 0.16, gain: 0.75 },
+      { wave: 'noise', decay: 0.04, gain: 0.25, filter: { type: 'highpass', freq: 2500 } },
     ],
     // A heavy clunk.
-    mine: [{ wave: 'square', freq: 120, freqEnd: 40, decay: 0.14, gain: 0.4, filter: { type: 'lowpass', freq: 1200 } }],
+    mine: [{ wave: 'square', freq: 120, freqEnd: 40, decay: 0.14, gain: 0.75, filter: { type: 'lowpass', freq: 1200 } }],
   },
   // The always-on cabinet hum while flying and on the level cards: square
   // waves at 55 and 55.7 Hz beat against each other (0.7 Hz), through a

@@ -24,12 +24,12 @@ describe('starfield', () => {
     }
   });
 
-  it('has the configured mix: count, sizes, about half tinted, some sparklers', () => {
+  it('has the configured mix: count, sizes, tinted share, some sparklers', () => {
     const stars = makeStarfield(STARS.seed);
     expect(stars).toHaveLength(STARS.count);
     const tinted = stars.filter((s) => s.color !== 0).length;
-    expect(tinted).toBeGreaterThan(stars.length * 0.35);
-    expect(tinted).toBeLessThan(stars.length * 0.7);
+    expect(tinted).toBeGreaterThan(stars.length * (STARS.tintShare - 0.15));
+    expect(tinted).toBeLessThan(stars.length * (STARS.tintShare + 0.15));
     expect(stars.some((s) => s.sparkle)).toBe(true);
     expect(new Set(stars.map((s) => s.layer))).toEqual(new Set([0, 1, 2]));
     for (const s of stars) {
