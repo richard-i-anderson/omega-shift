@@ -56,24 +56,71 @@ export const HYPERSPACE = {
 
 // Background starfield: dim, seeded, drawn under everything.
 export const STARS = {
-  count: 160,
+  count: 250,
   seed: 1981,
-  // Base alpha range; kept low so walls and enemies stay readable.
-  minAlpha: 0.25,
-  maxAlpha: 0.55,
-  // Share of stars that are 2 px instead of 1 px.
-  bigShare: 0.2,
-  // Share of stars tinted faint blue or amber (split evenly).
-  tintShare: 0.15,
-  // Gentle flicker: alpha = base × (1 − depth + depth·sin(rate·t + phase)).
-  flickerDepth: 0.25,
-  // Flicker angular speed range, radians per second.
-  minRate: 0.6,
-  maxRate: 2.2,
-  // Occasional slow twinkle: extra brightness, at most this much, for the
-  // top slice of a slow sine (a few seconds bright every half minute or so).
-  twinkleBoost: 0.35,
-  twinkleRate: 0.22,
+  // Base alpha range, before twinkle and reactions.
+  minAlpha: 0.35,
+  maxAlpha: 0.8,
+  // Nothing is ever drawn brighter than this, so stars stay below bullets.
+  maxDrawAlpha: 0.85,
+  // Cap for untinted/white stars of 2 px or more: a bright white 2 px dot
+  // reads as a bullet.
+  whiteBigCap: 0.55,
+  // Size shares: the rest are 1 px.
+  size2Share: 0.32,
+  size3Share: 0.08,
+  // Share of stars tinted (cyan, magenta, amber, violet, white); the rest are pale blue-grey.
+  tintShare: 0.5,
+  // Flicker: alpha = base × (1 − depth + depth·sin(rate·t + phase)).
+  flickerDepth: 0.3,
+  minRate: 1.5,
+  maxRate: 5,
+  // Twinkle: extra brightness of boost·max(0, sin(rate·t + phase))^power, a
+  // brief swell every several seconds.
+  twinkleBoost: 0.45,
+  twinkleRate: 0.8,
+  twinklePower: 8,
+  // Share of stars that are bright sparklers: 2 px, tinted, base ≥ 0.7, and a
+  // four-point cross whose arms (up to `sparkleArm` px) grow as they twinkle.
+  sparkleShare: 0.07,
+  sparkleArm: 5,
+  // Parallax layers, far to near: drift speed (px/s) and share of stars.
+  layerSpeeds: [4, 9, 18],
+  layerShares: [0.5, 0.32, 0.18],
+  // Drift heading = start + turn·t + wobble·sin(wobbleRate·t), radians.
+  driftTurn: 0.012,
+  driftWobble: 0.8,
+  driftWobbleRate: 0.045,
+  // Shooting stars: one every min–max seconds.
+  shootMin: 4,
+  shootMax: 10,
+  shootSpeedMin: 650,
+  shootSpeedMax: 950,
+  shootLife: 0.75, // seconds the head flies
+  shootTailMin: 90,
+  shootTailMax: 150,
+  shootAlpha: 0.85,
+  // Flare ring from an explosion: expands at `speed` px/s out to `radius`;
+  // each star brightens as it arrives, then decays with time constant `decay`.
+  flareSpeed: 520,
+  flareRadius: 420,
+  flareDecay: 0.55,
+  flareEnemy: 0.55,
+  flareShip: 0.8,
+  // A tinted star brightened by more than this (flare or flash) is drawn 1 px bigger.
+  flareGrow: 0.2,
+  maxFlares: 8,
+  // Hyperspace warp: stars within `radius` of the landing spot streak towards
+  // it for `duration` s. Streak length = streak·env·(1 − d/radius)·d.
+  warpDuration: 0.4,
+  warpRadius: 280,
+  warpStreak: 0.7,
+  warpPull: 0.35,
+  // Ship death: every star flashes brighter by `flashBoost`, decaying with time
+  // constant `flashDecay`. (No full-screen wash: a 2048×1536 blend costs more
+  // than the whole starfield on a software rasteriser.)
+  flashDecay: 0.25,
+  flashBoost: 0.5,
 } as const;
 
 export const START_LIVES = 3;
