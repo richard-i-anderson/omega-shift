@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Arena, validateKeyframes, type Keyframe } from '../src/arena/arena';
+import { N, radiusAt } from '../src/arena/shapes';
+import { DTHETA } from '../src/arena/field';
 import { LEVELS, validateLevel } from '../src/levels/levels';
 
 const RECT = { kind: 'rect', hw: 400, hh: 300 } as const;
@@ -109,5 +111,63 @@ describe('chambers', () => {
     const theta = a.openAngle(Math.PI / 4 - 0.1, 20);
     expect(a.chamberAt(theta)).toBe(a.chamberAt(0));
     expect(a.halfGap(theta)).toBeGreaterThanOrEqual(20);
+  });
+});
+
+describe('motion (spinning and breathing)', () => {
+  const STAR = { kind: 'star', points: 5, rx: 300, ry: 300, valley: 0.6 } as const;
+  const HEX = { kind: 'ngon', sides: 6, r: 80 } as const;
+  const still: Keyframe[] = [{ outer: STAR, inner: HEX, holdSec: 0, morphSec: 0 }];
+  const fit = { hw: 512, hh: 384 };
+
+  it('spins each field by resampling its shape at the turned angle', () => {
+    const a = new Arena(0, 0, still, false, { outerSpin: 0.5, innerSpin: -0.25 });
+    for (let i = 0; i < 120; i++) a.update(1 / 120); // t = 1 s
+    for (const i of [0, 37, 180, 511]) {
+      expect(a.outer.radii[i]).toBeCloseTo(radiusAt(STAR, i * DTHETA - 0.5), 3);
+      expect(a.inner.radii[i]).toBeCloseTo(radiusAt(HEX, i * DTHETA + 0.25), 3);
+    }
+    expect(a.moving).toBe(true);
+  });
+
+  it('breathes the fields in antiphase', () => {
+    const a = new Arena(0, 0, [{ outer: CIRCLE, inner: SMALL, holdSec: 0, morphSec: 0 }], false, {
+      breathe: { outer: 0.1, inner: -0.2, period: 4 },
+    });
+    for (let i = 0; i < 120; i++) a.update(1 / 120); // a quarter period: the sine peaks
+    expect(a.outer.radii[0]).toBeCloseTo(300 * 1.1, 3);
+    expect(a.inner.radii[0]).toBeCloseTo(80 * 0.8, 3);
+  });
+
+  it('checks the corridor at every relative angle when the fields spin at different rates', () => {
+    // Fine turning together: the pentagon's corners point at the star's tips
+    // (worst gap about 101 px, at the star's inner corners)...
+    const tight: Keyframe[] = [{ outer: { ...STAR, valley: 0.5 }, inner: { kind: 'ngon', sides: 5, r: 60 }, holdSec: 0, morphSec: 0 }];
+    expect(validateKeyframes(tight, 95, 30, { motion: { outerSpin: 0.3, innerSpin: 0.3 } })).toEqual([]);
+    // ...but at different rates a corner comes round to an inner corner (150 − 60 = 90 px).
+    const errors = validateKeyframes(tight, 95, 30, { motion: { outerSpin: 0.3, innerSpin: -0.3 } });
+    expect(errors.some((e) => e.includes('worst angle'))).toBe(true);
+  });
+
+  it('allows for the breath when checking the corridor and the score box', () => {
+    const kf: Keyframe[] = [{ outer: CIRCLE, inner: { kind: 'circle', r: 150 }, holdSec: 0, morphSec: 0 }];
+    expect(validateKeyframes(kf, 140, 60, {})).toEqual([]);
+    expect(validateKeyframes(kf, 140, 60, { motion: { breathe: { outer: -0.05, inner: 0.05, period: 3 } } })).not.toEqual([]);
+    expect(validateKeyframes(kf, 100, 145, { motion: { breathe: { outer: 0, inner: 0.1, period: 3 } } }).some((e) => e.includes('inner radius'))).toBe(true);
+  });
+
+  it('keeps a spinning outer field on screen at every angle', () => {
+    const wide: Keyframe[] = [{ outer: { kind: 'rect', hw: 490, hh: 300 }, inner: SMALL, holdSec: 0, morphSec: 0 }];
+    expect(validateKeyframes(wide, 100, 60, { fit })).toEqual([]);
+    expect(validateKeyframes(wide, 100, 60, { fit, motion: { outerSpin: 0.2 } }).some((e) => e.includes('off screen'))).toBe(true);
+  });
+
+  it("rejects motion on a chambered level (the fields can't cross)", () => {
+    const chambered: Keyframe[] = [{ outer: MALTESE, inner: HUB, holdSec: 0, morphSec: 0 }];
+    expect(validateKeyframes(chambered, 100, 60, { motion: { outerSpin: 0.2 } }).some((e) => e.includes('cross'))).toBe(true);
+  });
+
+  it('samples every sample angle', () => {
+    expect(N * DTHETA).toBeCloseTo(Math.PI * 2);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Game } from '../src/game';
+import { Game, LEVEL_KEYS } from '../src/game';
 import type { Input } from '../src/input';
 import { LEVELS } from '../src/levels/levels';
 import { advance, MAX_FRAME_GAP } from '../src/loop';
@@ -74,7 +74,7 @@ function startOn(name: string) {
     game.snapshot();
     game.update(STEP, input as unknown as Input);
   };
-  input.presses.add(`Digit${LEVELS.findIndex((l) => l.name === name) + 1}`);
+  input.presses.add(LEVEL_KEYS[LEVELS.findIndex((l) => l.name === name)]);
   for (let i = 0; i < 4 * 120; i++) step();
   expect(game.state).toBe('playing');
   return { game, input, step };

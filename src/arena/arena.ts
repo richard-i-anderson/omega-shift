@@ -1,6 +1,6 @@
 import { DTHETA, ForceField } from './field';
-import { N, sampleShape, type ShapeSpec } from './shapes';
-import { normAngle, smoothstep } from '../math/vec';
+import { N, sampleShape, sampleShapeInto, type ShapeSpec } from './shapes';
+import { normAngle, smoothstep, TAU } from '../math/vec';
 import type { ArenaHit } from '../events';
 
 export interface Keyframe {
@@ -12,9 +12,23 @@ export interface Keyframe {
   morphSec: number;
 }
 
+/**
+ * Continuous motion on top of the keyframe timeline: each field spins (rad/s,
+ * positive = clockwise on screen) and breathes, its size scaled by
+ * 1 + amplitude·sin(2πt / period). The two fields share one sine, so opposite
+ * signs breathe in antiphase.
+ */
+export interface Motion {
+  outerSpin?: number;
+  innerSpin?: number;
+  breathe?: { outer: number; inner: number; period: number };
+}
+
 interface SampledKeyframe {
   outer: Float32Array;
   inner: Float32Array;
+  outerSpec: ShapeSpec;
+  innerSpec: ShapeSpec;
   holdSec: number;
   morphSec: number;
 }
@@ -23,9 +37,16 @@ function sampleKeyframes(keyframes: Keyframe[]): SampledKeyframe[] {
   return keyframes.map((k) => ({
     outer: sampleShape(k.outer),
     inner: sampleShape(k.inner),
+    outerSpec: k.outer,
+    innerSpec: k.inner,
     holdSec: k.holdSec,
     morphSec: k.morphSec,
   }));
+}
+
+/** The smallest and largest size factors a breathing amplitude reaches. */
+function breatheRange(amp = 0): [number, number] {
+  return [1 - Math.abs(amp), 1 + Math.abs(amp)];
 }
 
 function blend(a: ArrayLike<number>, b: ArrayLike<number>, t: number, out: Float32Array): void {
@@ -69,6 +90,9 @@ export function findChambers(outer: ArrayLike<number>, inner: ArrayLike<number>,
 export interface ValidateOptions {
   /** The level shows the score outside the outer field, so the inner field may be tiny or absent. */
   scoreOutside?: boolean;
+  motion?: Motion;
+  /** Half-extents of the screen around the arena centre; the outer field must stay inside. */
+  fit?: { hw: number; hh: number };
 }
 
 /**
@@ -89,6 +113,8 @@ export function validateKeyframes(
   opts: ValidateOptions = {},
 ): string[] {
   const errors: string[] = [];
+  if (opts.fit) errors.push(...checkFit(keyframes, opts.fit, opts.motion));
+  if (opts.motion) return errors.concat(validateMotion(keyframes, minGap, minInnerRadius, opts));
   sampleKeyframes(keyframes).forEach((k, idx) => {
     let gap = Infinity;
     let inner = Infinity;
@@ -113,12 +139,64 @@ export function validateKeyframes(
   return errors;
 }
 
+/**
+ * Motion levels. Every relative angle between the fields comes round when they
+ * spin at different rates, so the corridor is checked at every relative shift
+ * (by whole samples), with the outer field at its smallest breath and the inner
+ * at its largest. Gap and blends stay linear in the radii, so keyframes that
+ * pass guarantee every in-between moment passes too. Chambers and an outside
+ * score can't move: validation only covers open rings.
+ */
+function validateMotion(keyframes: Keyframe[], minGap: number, minInnerRadius: number, opts: ValidateOptions): string[] {
+  const m = opts.motion!;
+  const errors: string[] = [];
+  if (opts.scoreOutside) errors.push('a level with the score outside the arena can\'t have motion');
+  const [oLo] = breatheRange(m.breathe?.outer);
+  const [iLo, iHi] = breatheRange(m.breathe?.inner);
+  const shifts = (m.outerSpin ?? 0) !== (m.innerSpin ?? 0) ? N : 1;
+  sampleKeyframes(keyframes).forEach((k, idx) => {
+    let gap = Infinity;
+    let inner = Infinity;
+    for (let s = 0; s < shifts; s++) {
+      for (let i = 0; i < N; i++) gap = Math.min(gap, oLo * k.outer[i] - iHi * k.inner[(i - s + N) % N]);
+    }
+    for (let i = 0; i < N; i++) inner = Math.min(inner, iLo * k.inner[i]);
+    if (gap <= 0) errors.push(`keyframe ${idx}: the fields cross at some angle (chambers can't have motion)`);
+    else if (gap < minGap) errors.push(`keyframe ${idx}: corridor ${gap.toFixed(1)} < ${minGap} at the worst angle and breath`);
+    if (inner < minInnerRadius) errors.push(`keyframe ${idx}: inner radius ${inner.toFixed(1)} < ${minInnerRadius} at its smallest breath`);
+  });
+  return errors;
+}
+
+/** The outer field, at its largest breath and (if it spins) any angle, stays on screen. */
+function checkFit(keyframes: Keyframe[], fit: { hw: number; hh: number }, m?: Motion): string[] {
+  const errors: string[] = [];
+  const [, oHi] = breatheRange(m?.breathe?.outer);
+  const spins = (m?.outerSpin ?? 0) !== 0;
+  sampleKeyframes(keyframes).forEach((k, idx) => {
+    for (let i = 0; i < N; i++) {
+      const r = k.outer[i] * oHi;
+      const a = i * DTHETA;
+      const off = spins ? r > Math.min(fit.hw, fit.hh) : Math.abs(r * Math.cos(a)) > fit.hw || Math.abs(r * Math.sin(a)) > fit.hh;
+      if (off) {
+        errors.push(`keyframe ${idx}: outer field reaches ${r.toFixed(1)} px, off screen${spins ? ' as it spins' : ''}`);
+        return;
+      }
+    }
+  });
+  return errors;
+}
+
 /** The playfield: an outer and an inner force field driven by a keyframe timeline. */
 export class Arena {
   readonly outer: ForceField;
   readonly inner: ForceField;
   private keyframes: SampledKeyframe[] = [];
   private loop = false;
+  private motion: Motion | null = null;
+  // Scratch for resampling spinning keyframes each step.
+  private readonly spunA = new Float32Array(N);
+  private readonly spunB = new Float32Array(N);
   private t = 0;
   private transition: { outer: Float32Array; inner: Float32Array; t: number; dur: number } | null = null;
   private readonly bufOuter = new Float32Array(N);
@@ -134,16 +212,18 @@ export class Arena {
     readonly cy: number,
     keyframes: Keyframe[],
     loop: boolean,
+    motion?: Motion,
   ) {
     this.outer = new ForceField('outer', cx, cy);
     this.inner = new ForceField('inner', cx, cy);
-    this.setLevel(keyframes, loop, 0);
+    this.setLevel(keyframes, loop, 0, motion);
   }
 
   /** Switch to a new timeline, morphing from the current shape over `transitionSec`. */
-  setLevel(keyframes: Keyframe[], loop: boolean, transitionSec: number): void {
+  setLevel(keyframes: Keyframe[], loop: boolean, transitionSec: number, motion?: Motion): void {
     this.keyframes = sampleKeyframes(keyframes);
     this.loop = loop;
+    this.motion = motion ?? null;
     this.t = 0;
     if (transitionSec > 0) {
       this.transition = {
@@ -163,7 +243,7 @@ export class Arena {
 
   /** True while the walls are changing shape. */
   get moving(): boolean {
-    return this.transition !== null || this.segmentAt(this.t).morph >= 0;
+    return this.transition !== null || this.motion !== null || this.segmentAt(this.t).morph >= 0;
   }
 
   update(dt: number): void {
@@ -204,15 +284,31 @@ export class Arena {
   private timelineAt(time: number, outO: Float32Array, outI: Float32Array): void {
     const { k, morph } = this.segmentAt(time);
     const kf = this.keyframes[k];
-    if (morph < 0) {
-      outO.set(kf.outer);
-      outI.set(kf.inner);
-      return;
-    }
-    const next = this.keyframes[(k + 1) % this.keyframes.length];
-    const s = smoothstep(morph);
-    blend(kf.outer, next.outer, s, outO);
-    blend(kf.inner, next.inner, s, outI);
+    const next = morph < 0 ? null : this.keyframes[(k + 1) % this.keyframes.length];
+    const s = morph < 0 ? 0 : smoothstep(morph);
+    const m = this.motion;
+    const b = m?.breathe;
+    const wave = b ? Math.sin((TAU * time) / b.period) : 0;
+    this.field(kf.outer, kf.outerSpec, next?.outer, next?.outerSpec, s, (m?.outerSpin ?? 0) * time, 1 + (b?.outer ?? 0) * wave, outO);
+    this.field(kf.inner, kf.innerSpec, next?.inner, next?.innerSpec, s, (m?.innerSpin ?? 0) * time, 1 + (b?.inner ?? 0) * wave, outI);
+  }
+
+  /** One field's radii: keyframe `a` (blended `s` of the way to `b`), turned by `angle`, scaled by `scale`. */
+  private field(
+    a: Float32Array,
+    aSpec: ShapeSpec,
+    b: Float32Array | undefined,
+    bSpec: ShapeSpec | undefined,
+    s: number,
+    angle: number,
+    scale: number,
+    out: Float32Array,
+  ): void {
+    const spun = angle !== 0;
+    const ra = spun ? sampleShapeInto(aSpec, this.spunA, angle) : a;
+    if (b && bSpec) blend(ra, spun ? sampleShapeInto(bSpec, this.spunB, angle) : b, s, out);
+    else out.set(ra);
+    if (scale !== 1) for (let i = 0; i < N; i++) out[i] *= scale;
   }
 
   /** Radius of the enemy orbit track: halfway between the two fields. */

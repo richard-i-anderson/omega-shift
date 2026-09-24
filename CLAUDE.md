@@ -19,12 +19,13 @@ npm run typecheck    # tsc --noEmit
 npm run build        # typecheck + static bundle in dist/
 ```
 
-In play, `M` toggles sound (remembered in `localStorage`). Open `http://localhost:5173/?debug` for debug keys: `1`–`9` jump to a level, `` ` `` toggles an overlay showing the orbit track, wall normals, and wall velocity, and `F` toggles a frame-timing overlay (frame intervals, estimated refresh rate, sim steps per frame, update and render ms).
+In play, `M` toggles sound (remembered in `localStorage`). Open `http://localhost:5173/?debug` for debug keys: `1`–`9`, `0` and `-` jump to levels 1–11, `` ` `` toggles an overlay showing the orbit track, wall normals, and wall velocity, and `F` toggles a frame-timing overlay (frame intervals, estimated refresh rate, sim steps per frame, update and render ms).
 
 ## Architecture
 
 **Force fields are polar radius arrays.** Every field is a star-shaped closed curve around the arena centre, stored as radii sampled at `N` fixed angles (`src/arena/shapes.ts`). Shapes are `r(θ)` functions (`ShapeSpec`: circle, ellipse, rect, diamond, cross, ngon, star, maltese; the last two are star-shaped polygons). Most of the design follows from this:
 - Morphing between any two shapes is linear interpolation of the radius arrays (`Arena` keyframe timeline in `src/arena/arena.ts`, also used for the between-level transition).
+- **Motion:** a level's optional `motion` (`Motion` in `arena.ts`) spins each field and breathes its size on top of the keyframes (SPIN, VORTEX). Spinning resamples the shape specs at the turned angle each step (`sampleShapeInto`), so corners stay sharp. Validation then checks the corridor at every relative angle between the fields, at the worst breath, and that a spinning outer field stays on screen.
 - The enemy orbit track is `(inner(θ) + outer(θ)) / 2`, so it works for every shape and follows morphs automatically.
 - `validateKeyframes` checks the corridor width and the inner-field size per keyframe. Because blends are linear, keyframes that pass guarantee every in-between shape passes too. A new shape must be star-shaped around the centre (every boundary point visible from it).
 - **Chambers:** where the inner field reaches past the outer one, the corridor is closed, splitting the arena into isolated chambers (`Arena.chambers`, `chamberAt`; the Maltese level). Chambered keyframes need radial dividing walls and can't be part of a morph. Track-followers turn back at a chamber's end wall (droids as a formation), hunters only chase or shoot within their chamber, and `H` hyperspaces the ship to the next chamber clockwise (on connected levels, to a random spot).

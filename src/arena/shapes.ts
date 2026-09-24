@@ -64,6 +64,16 @@ function maltesePoints(s: Extract<ShapeSpec, { kind: 'maltese' }>): [number, num
   return pts;
 }
 
+// Vertex lists per spec, so sampling a spinning polygon every step doesn't
+// rebuild them for each of the N angles. Specs are level data and never mutate.
+const polygonCache = new WeakMap<ShapeSpec, [number, number][]>();
+
+function cachedPoints<S extends ShapeSpec>(spec: S, make: (s: S) => [number, number][]): [number, number][] {
+  let pts = polygonCache.get(spec);
+  if (!pts) polygonCache.set(spec, (pts = make(spec)));
+  return pts;
+}
+
 /** Distance along θ from the origin to a polygon that is star-shaped around it. */
 function polygonRadius(pts: [number, number][], theta: number): number {
   const dx = Math.cos(theta);
@@ -117,15 +127,24 @@ export function radiusAt(spec: ShapeSpec, theta: number): number {
       return apothem / Math.cos(local - Math.PI / spec.sides);
     }
     case 'star':
-      return polygonRadius(starPoints(spec), theta);
+      return polygonRadius(cachedPoints(spec, starPoints), theta);
     case 'maltese':
-      return polygonRadius(maltesePoints(spec), theta);
+      return polygonRadius(cachedPoints(spec, maltesePoints), theta);
   }
 }
 
 /** Sample a shape at N evenly spaced angles, starting at θ = 0. */
 export function sampleShape(spec: ShapeSpec, n = N): Float32Array {
-  const out = new Float32Array(n);
-  for (let i = 0; i < n; i++) out[i] = radiusAt(spec, (i / n) * TAU);
+  return sampleShapeInto(spec, new Float32Array(n));
+}
+
+/**
+ * Sample a shape into `out`, turned by `offset` radians (clockwise on screen):
+ * out[i] = r(θᵢ − offset). Resampling the shape itself keeps corners sharp,
+ * where shifting an already-sampled array would round them off.
+ */
+export function sampleShapeInto(spec: ShapeSpec, out: Float32Array, offset = 0): Float32Array {
+  const n = out.length;
+  for (let i = 0; i < n; i++) out[i] = radiusAt(spec, (i / n) * TAU - offset);
   return out;
 }

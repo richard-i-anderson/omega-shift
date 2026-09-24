@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Game } from '../src/game';
+import { Game, LEVEL_KEYS } from '../src/game';
 import type { Input } from '../src/input';
 import { LEVELS } from '../src/levels/levels';
 
@@ -88,7 +88,7 @@ describe('game loop (headless)', () => {
     const tick = (sec: number) => {
       for (let i = 0; i < sec * 120; i++) game.update(1 / 120, input as unknown as Input);
     };
-    input.presses.add(`Digit${LEVELS.findIndex((l) => l.name === name) + 1}`);
+    input.presses.add(LEVEL_KEYS[LEVELS.findIndex((l) => l.name === name)]);
     tick(4);
     expect(game.state).toBe('playing');
     expect(game.levelName).toBe(name);
@@ -140,7 +140,7 @@ describe('game loop (headless)', () => {
     const p = game.arena.trackPoint(Math.PI / 4);
     Object.assign(game.ship!, { x: p.x, y: p.y, vx: 0, vy: 0 });
     game.enemies = [];
-    input.presses.add(`Digit${LEVELS.findIndex((l) => l.name === 'MALTESE') + 1}`);
+    input.presses.add(LEVEL_KEYS[LEVELS.findIndex((l) => l.name === 'MALTESE')]);
     for (let i = 0; i < 4 * 120; i++) {
       tick(1 / 120);
       const s = game.ship!;
@@ -148,5 +148,19 @@ describe('game loop (headless)', () => {
     }
     const s = game.ship!;
     expect(game.arena.chamberAtPoint(s.x, s.y)).toBeGreaterThanOrEqual(0);
+  });
+
+  it('debug keys 0 and - reach levels 10 and 11', () => {
+    expect(LEVELS).toHaveLength(11);
+    for (const [key, index] of [['Digit0', 9], ['Minus', 10]] as const) {
+      const game = new Game(true);
+      const input = new FakeInput();
+      input.presses.add(key);
+      game.update(1 / 120, input as unknown as Input);
+      expect(game.levelIndex).toBe(index);
+    }
+    expect(LEVELS[4].name).toBe('SPIN');
+    expect(LEVELS[9].name).toBe('VORTEX');
+    expect(LEVELS[10].name).toBe('SHIFT');
   });
 });

@@ -36,6 +36,8 @@ const SHIP_SPAWN_THETA = Math.PI;
 const DROID_SPAWN_THETA = 0;
 /** Pixels between droids along the track when a wave spawns. */
 const DROID_SPACING = 50;
+/** Debug keys that jump to levels 1–9, 10 (`0`) and 11 (`-`). */
+export const LEVEL_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0', 'Minus'];
 const HYPER_COLOR = '#35e0ff';
 /** The ship's blast cools from white-hot to fiery orange. */
 const SHIP_BLAST_COLOR = '#ff9a3c';
@@ -93,7 +95,7 @@ export class Game {
     }
     // The title screen shows the morphing level in the background.
     const showcase = LEVELS[LEVELS.length - 1];
-    this.arena = new Arena(WORLD.cx, WORLD.cy, showcase.keyframes, showcase.loop);
+    this.arena = new Arena(WORLD.cx, WORLD.cy, showcase.keyframes, showcase.loop, showcase.motion);
   }
 
   get levelName(): string {
@@ -141,12 +143,12 @@ export class Game {
   update(dt: number, input: Input): void {
     if (this.debugEnabled) {
       if (input.wasPressed('Backquote')) this.showDebug = !this.showDebug;
-      for (let i = 1; i <= LEVELS.length; i++) {
-        if (input.wasPressed(`Digit${i}`)) {
+      LEVEL_KEYS.slice(0, LEVELS.length).forEach((key, i) => {
+        if (input.wasPressed(key)) {
           if (this.state === 'title' || this.state === 'gameOver') this.resetRun();
-          this.beginLevel(i - 1, LEVEL_TRANSITION_SEC);
+          this.beginLevel(i, LEVEL_TRANSITION_SEC);
         }
-      }
+      });
     }
     if ((this.state === 'playing' || this.state === 'levelClear') && input.wasPressed('KeyP', 'Escape')) {
       this.paused = !this.paused;
@@ -201,7 +203,7 @@ export class Game {
     const { def, scale } = levelFor(index);
     this.levelIndex = index;
     this.scale = scale;
-    this.arena.setLevel(def.keyframes, def.loop, transitionSec);
+    this.arena.setLevel(def.keyframes, def.loop, transitionSec, def.motion);
     this.hudFrom = this.hudPos;
     this.hudTo = def.scoreAt ?? { x: WORLD.cx, y: WORLD.cy };
     this.hudT = 0;
