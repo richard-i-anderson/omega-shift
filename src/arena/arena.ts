@@ -1,6 +1,7 @@
 import { DTHETA, ForceField } from './field';
 import { N, sampleShape, type ShapeSpec } from './shapes';
 import { normAngle, smoothstep } from '../math/vec';
+import type { ArenaHit } from '../events';
 
 export interface Keyframe {
   outer: ShapeSpec;
@@ -125,6 +126,8 @@ export class Arena {
   /** Open stretches of corridor; a single chamber of length N when it's one connected ring. */
   chambers: Chamber[] = [];
   private readonly chamberOf = new Int16Array(N);
+  /** Flashing hits since `Game` last collected them (only from `collideArena` calls given a source). */
+  hits: ArenaHit[] = [];
 
   constructor(
     readonly cx: number,

@@ -5,6 +5,7 @@ import { isHunter, isMine, makeDroid, makeMine, promote, updateEnemy, type Enemy
 import { explode, updateParticles, type Particle } from './entities/particles';
 import { Ship } from './entities/ship';
 import { ENEMY, HYPERSPACE, LEVEL_CLEAR_SEC, LEVEL_TRANSITION_SEC, SCORE, SHIP, START_LIVES, WORLD } from './config';
+import { MAX_PENDING_EVENTS, type GameEvent } from './events';
 import type { Input } from './input';
 import { LEVELS, levelFor, validateLevel } from './levels/levels';
 import { dist2, rand, smoothstep, TAU } from './math/vec';
@@ -44,6 +45,8 @@ export class Game {
   enemyBullets: Bullet[] = [];
   enemies: Enemy[] = [];
   particles: Particle[] = [];
+  /** What happened since the browser layer last drained this (it plays sounds for them). */
+  events: GameEvent[] = [];
 
   time = 0;
   stateTimer = 0;
@@ -118,6 +121,12 @@ export class Game {
         if (this.stateTimer <= 0 && input.wasPressed('Enter', 'Space')) this.startGame();
         break;
     }
+    for (const h of this.arena.hits) this.emit({ type: 'fieldHit', impact: h.impact, source: h.source });
+    this.arena.hits.length = 0;
+  }
+
+  private emit(e: GameEvent): void {
+    if (this.events.length < MAX_PENDING_EVENTS) this.events.push(e);
   }
 
   private resetRun(): void {
@@ -175,6 +184,7 @@ export class Game {
     }
     this.promoteTimer = ENEMY.promoteEvery / this.scale;
     this.state = 'playing';
+    this.emit({ type: 'waveStart' });
   }
 
   /** `n` track angles centred on `theta`, `gap` pixels apart along the track. */
@@ -251,6 +261,7 @@ export class Game {
     }
     this.jumpShip(ship, p.x, p.y);
     ship.hyperCooldown = HYPERSPACE.cooldown;
+    this.emit({ type: 'hyperspace' });
   }
 
   private jumpShip(ship: Ship, x: number, y: number): void {
@@ -295,6 +306,7 @@ export class Game {
           ),
         );
         ship.cooldown = SHIP.fireCooldown;
+        this.emit({ type: 'shipFire' });
       }
     }
     for (const b of this.bullets) b.update(dt, this.arena);
@@ -312,8 +324,12 @@ export class Game {
         this.enemyBullets.push(new Bullet(x, y, Math.cos(a) * s, Math.sin(a) * s, ENEMY.bulletLife));
       },
       layMine: (kind, x, y) => {
-        if (this.enemies.filter(isMine).length < ENEMY.maxMines) this.enemies.push(makeMine(kind, x, y));
+        if (this.enemies.filter(isMine).length < ENEMY.maxMines) {
+          this.enemies.push(makeMine(kind, x, y));
+          this.emit({ type: 'mineLaid', kind });
+        }
       },
+      emit: (e) => this.emit(e),
     };
     const dirs = this.enemies.map((e) => e.dir);
     for (const e of [...this.enemies]) updateEnemy(e, dt, world);
@@ -344,6 +360,7 @@ export class Game {
       const droids = this.enemies.filter((e) => e.kind === 'droid');
       if (droids.length && this.enemies.filter(isHunter).length < ENEMY.maxHunters) {
         promote(droids[Math.floor(Math.random() * droids.length)], this.scale);
+        this.emit({ type: 'promoted', to: 'command' });
       }
     }
 
@@ -384,6 +401,7 @@ export class Game {
     e.dead = true;
     explode(this.particles, e.x, e.y, ENEMY_COLORS[e.kind], isMine(e) ? 8 : 16);
     this.addScore(SCORE[e.kind]);
+    this.emit({ type: 'enemyKilled', kind: e.kind });
   }
 
   private addScore(points: number): void {
@@ -391,6 +409,7 @@ export class Game {
     while (this.score >= this.nextExtraLife) {
       this.lives++;
       this.nextExtraLife += SCORE.extraLifeEvery;
+      this.emit({ type: 'extraLife' });
     }
   }
 
@@ -400,9 +419,11 @@ export class Game {
     this.ship = null;
     this.bullets = [];
     this.lives--;
+    this.emit({ type: 'shipKilled' });
     if (this.lives <= 0) {
       this.state = 'gameOver';
       this.stateTimer = 1.5;
+      this.emit({ type: 'gameOver' });
     } else {
       this.respawnTimer = SHIP.respawnDelay;
     }
@@ -416,5 +437,6 @@ export class Game {
     this.beginLevel(next, LEVEL_TRANSITION_SEC);
     this.stateTimer = Math.max(LEVEL_CLEAR_SEC, LEVEL_TRANSITION_SEC);
     this.justCleared = true;
+    this.emit({ type: 'waveCleared' });
   }
 }

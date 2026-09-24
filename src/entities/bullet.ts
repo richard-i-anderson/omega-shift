@@ -18,6 +18,6 @@ export class Bullet implements Body {
     this.y += this.vy * dt;
     this.life -= dt;
     // Shots are absorbed by the force fields.
-    if (this.life <= 0 || collideArena(this, arena, 0)) this.dead = true;
+    if (this.life <= 0 || collideArena(this, arena, 0, 'shot')) this.dead = true;
   }
 }

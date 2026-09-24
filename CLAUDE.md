@@ -19,7 +19,7 @@ npm run typecheck    # tsc --noEmit
 npm run build        # typecheck + static bundle in dist/
 ```
 
-Open `http://localhost:5173/?debug` for debug keys: `1`–`9` jump to a level, `` ` `` toggles an overlay showing the orbit track, wall normals, and wall velocity.
+In play, `M` toggles sound (remembered in `localStorage`). Open `http://localhost:5173/?debug` for debug keys: `1`–`9` jump to a level, `` ` `` toggles an overlay showing the orbit track, wall normals, and wall velocity.
 
 ## Architecture
 
@@ -36,5 +36,7 @@ Open `http://localhost:5173/?debug` for debug keys: `1`–`9` jump to a level, `
 **Simulation** runs at a fixed 120 Hz (`src/loop.ts`), rendering once per animation frame. The world is a fixed 1024×768 logical space, letterboxed to the window (`src/main.ts`). `Game` (`src/game.ts`) is the state machine (`title → levelClear → playing → … → gameOver`; `levelClear` doubles as the "get ready" card while the arena morphs to the next level) and owns every entity list. `Game` doesn't touch the DOM, so tests drive it headlessly with a fake `Input` (`tests/game.test.ts`).
 
 **Enemies** (`src/entities/enemies.ts`) are one `Enemy` shape with a `kind`. Droids follow the track; one at a time they're promoted to command ships (track-following, shoot, lay photon mines), which eventually become free-flying death ships (chase the player, bounce off walls, lay vapor mines). Mines stay put but get pushed by moving walls.
+
+**Events and sound:** `Game` never calls audio. It pushes `GameEvent`s (`src/events.ts`) onto `game.events`, and `main.ts` drains them into `AudioEngine` (`src/audio/engine.ts`) once per frame, so tests can assert on what fired. Enemy code reports through `EnemyWorld.emit`. Force-field hits are recorded by `collideArena` on `arena.hits` when its caller passes a `source` (`'ship' | 'shot' | 'enemy' | 'mine'`) and the hit is hard enough to flash; `Game` moves them into `events` each step. The background pulse needs no events: `ambientDanger(game)` (`src/audio/danger.ts`, pure) picks it from the most dangerous enemy alive. All sounds are synthesised (`src/audio/synth.ts`: oscillators, noise, envelopes, sweeps) from patches in the `SOUND` block of `src/config.ts`; the AudioContext is created on the first key press or click. `tests/sound.test.ts` checks the events and runs the engine against a fake AudioContext.
 
 **Tuning and content:** all gameplay numbers are in `src/config.ts`. Levels are data in `src/levels/levels.ts`; after the last level the list repeats with a higher speed scale. A new level only needs a new entry there, and the level-validation test covers it automatically.

@@ -7,7 +7,7 @@ Why things are the way they are. `CLAUDE.md` covers commands and architecture; t
 - **The brief:** a game very like Omega Race (1981), but the force fields (the outer boundary and the central score box) change shape: rectangle, circle, cross and so on, with at least one level where they morph during play.
 - **Name: "Omega Shift", not "Omega Race".** Omega Race is an existing arcade title, so the game, the repo (`omega-shift`) and the public URL use a distinct name. The local folder is still called `OmegaRace`, which is fine.
 - **Gameplay follows the original:** rotate/thrust/fire ship with momentum; droids circle the arena and are promoted to command ships (shoot, lay photon mines), which become death ships (chase, lay vapor mines). Walls bounce the ship, and the side you hit flashes.
-- **v1 scope:** the core game plus five shape levels (four more were added later: BAR, PILLAR, STAR, MALTESE; see below). Deliberately deferred: sound, a high-score table, an attract mode, and touch controls (the game is keyboard-only, so it doesn't work on phones).
+- **v1 scope:** the core game plus five shape levels (four more were added later: BAR, PILLAR, STAR, MALTESE; see below). Deliberately deferred: sound (added later; see below), a high-score table, an attract mode, and touch controls (the game is keyboard-only, so it doesn't work on phones).
 
 ## Technology
 
@@ -33,10 +33,22 @@ Why things are the way they are. `CLAUDE.md` covers commands and architecture; t
 - **Enemies in chambers:** a wave's droids are shared between the chambers the ship isn't in, so the player has to hyperspace to reach them. Track-followers turn back at a chamber's end wall, and the droids in a chamber turn together as a formation (turning individually made them pass through each other). Hunters only chase or shoot at a ship in their own chamber.
 - **Track-followers move at a constant speed along the track**, not a constant angular speed, which bunched enemies on thin shapes (the bar's track is long and flat far from the centre). Wave droids are spaced 50 px apart along the track for the same reason.
 
+## Sound
+
+- **The brief:** 80s-style sound; a sound whenever anything hits a force field; each enemy distinctive, more urgent the more dangerous it is. The user chose both a background pulse set by danger and per-action one-shots, with M toggling mute (remembered).
+- **`Game` emits events instead of calling audio.** `Game` must stay free of DOM and browser APIs so tests can drive it headlessly; a `GameEvent` list keeps it that way and lets tests assert which sounds would play (`tests/sound.test.ts`). `main.ts` drains the list once per frame, after the frame's physics steps. The list is capped at 256 so a caller that never drains it (a test) doesn't grow it forever.
+- **Field hits come from `collideArena`, tagged by the caller.** Collision already decides when a hit is hard enough to flash (`ARENA.flashImpact`), so "makes a sound" means exactly "flashes". The body classes pass a `source`; the stress test and other callers that pass none record nothing. Mines resting against a morphing wall get shoved every step, which is why hits are throttled.
+- **Field-hit throttle: one per 40 ms per source** (`SOUND.hitThrottle`). At 120 Hz a body pinned by a moving wall, or a burst of shots, would otherwise stack dozens of voices and clip. Per source, so a shot hitting the wall doesn't swallow the ship's own bump.
+- **Synthesised with Web Audio, no samples:** the project has no runtime dependencies and no asset pipeline, and raw square/saw/triangle oscillators plus white noise with fast envelopes and exponential sweeps *are* the 80s arcade sound. Every sound is a data "patch" (a list of layers) in `SOUND` in `config.ts`, so tuning by ear means editing numbers, not code. A compressor on the master bus stops explosions over the siren from clipping.
+- **Danger levels: none < droid < command < death**, from the most dangerous enemy alive (mines don't count). Droid: slow low throb (~1.2 Hz, 55–70 Hz). Command: faster, higher two-note warble (~2.5 Hz). Death: frantic rising siren (~5 Hz). Each is a continuously running oscillator with one LFO on pitch and volume, and they crossfade over 0.3 s. The pulse only plays in `playing` and not paused (silent on the title, level cards and game over); `ambientDanger` holds that rule and is unit-tested.
+- **The AudioContext is created on the first keydown or click** (browsers block audio until a gesture), and suspended while the tab is hidden, since the frame loop stops then and the pulse would otherwise drone on. Mute is saved in `localStorage` under `omegaShift.muted`, wrapped in try/catch (blocked storage just means it isn't remembered).
+- **Not checked in a real browser:** headless Chrome wouldn't start from the agent's sandbox, so the engine was only exercised against a fake AudioContext that rejects illegal scheduling (exponential ramps to 0, negative times). Nobody has listened to it yet.
+
 ## Testing
 
 - **Unit tests** cover the shape maths, the morph timeline, level validation, and collision (flat walls, moving walls, the inside corners of the cross, snap-back).
 - **`tests/stress.test.ts`** runs 200 fast bodies per level for 60 simulated seconds and asserts none escape the corridor or leave the chamber they started in. This is the main guard for any change to physics, shapes or N. With nine levels the suite takes about 17 s.
+- **`tests/sound.test.ts`** checks which `GameEvent`s fire (field hits by source, promotions, enemy fire, kills), `dangerLevel` ordering, and runs the audio engine against a fake AudioContext.
 - **`tests/game.test.ts`** drives `Game` headlessly with a fake `Input`: five minutes of random play, plus a check that clearing a wave morphs the arena into the next level.
 - **The long simulation tests have a 60 s timeout.** Each takes about 1.5 s on a laptop (the whole suite about 8 s), but they went over Vitest's 5 s default on GitHub's runners, which broke the first deploy.
 - **Visual checks** have been headless Chrome screenshots (`--headless=new --screenshot`), sometimes via a temporary preview page that renders every level; that page was deleted afterwards. The Claude in Chrome extension was declined, so don't suggest it.
@@ -54,4 +66,5 @@ Why things are the way they are. `CLAUDE.md` covers commands and architecture; t
 - **Not yet played with a real keyboard.** Speeds, fire rates, promotion timers and point values in `src/config.ts` are first guesses and need playtesting.
 - **Morphs checked visually** (headless screenshots of CROSS→MALTESE and RING→BAR mid-transition, and the Maltese chambers over time), but new levels' tuning (droid counts, speed scales) is untested in real play.
 - **`actions/deploy-pages@v4`** gives a Node 20 deprecation warning. It still works, but should move to a newer version at some point.
-- **Deferred features:** sound, high-score table, attract mode, touch controls.
+- **Sound needs tuning by ear:** volumes, pitches and the pulse rates in `SOUND` are first guesses.
+- **Deferred features:** high-score table, attract mode, touch controls.

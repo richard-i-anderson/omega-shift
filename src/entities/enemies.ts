@@ -1,6 +1,7 @@
 import type { Arena } from '../arena/arena';
 import { ENEMY } from '../config';
 import { clamp, normAngle, rand, TAU } from '../math/vec';
+import type { GameEvent } from '../events';
 import { collideArena, type Body } from '../physics/collide';
 
 /**
@@ -36,6 +37,8 @@ export interface EnemyWorld {
   target: { x: number; y: number } | null;
   fire(x: number, y: number, tx: number, ty: number): void;
   layMine(kind: 'photon' | 'vapor', x: number, y: number): void;
+  /** Report something that happened (for sound). */
+  emit(e: GameEvent): void;
 }
 
 export function isHunter(e: Enemy): boolean {
@@ -139,7 +142,10 @@ export function updateEnemy(e: Enemy, dt: number, w: EnemyWorld): void {
       followTrack(e, dt, ENEMY.commandSpeed * w.scale, 30, w.arena);
       e.fireTimer -= dt;
       if (e.fireTimer <= 0) {
-        if (target) w.fire(e.x, e.y, target.x, target.y);
+        if (target) {
+          w.fire(e.x, e.y, target.x, target.y);
+          w.emit({ type: 'enemyFire', kind: e.kind });
+        }
         e.fireTimer = (ENEMY.commandFireEvery / w.scale) * rand(0.7, 1.3);
       }
       e.dropTimer -= dt;
@@ -147,7 +153,10 @@ export function updateEnemy(e: Enemy, dt: number, w: EnemyWorld): void {
         w.layMine('photon', e.x, e.y);
         e.dropTimer = (ENEMY.commandDropEvery / w.scale) * rand(0.7, 1.3);
       }
-      if (e.age > ENEMY.commandLifetime / w.scale) promote(e, w.scale);
+      if (e.age > ENEMY.commandLifetime / w.scale) {
+        promote(e, w.scale);
+        w.emit({ type: 'promoted', to: 'death' });
+      }
       break;
 
     case 'death': {
@@ -179,7 +188,7 @@ export function updateEnemy(e: Enemy, dt: number, w: EnemyWorld): void {
       }
       e.x += e.vx * dt;
       e.y += e.vy * dt;
-      collideArena(e, w.arena, 1);
+      collideArena(e, w.arena, 1, 'enemy');
       e.dropTimer -= dt;
       if (e.dropTimer <= 0) {
         w.layMine('vapor', e.x, e.y);
@@ -196,7 +205,7 @@ export function updateEnemy(e: Enemy, dt: number, w: EnemyWorld): void {
       e.vy *= Math.exp(-3 * dt);
       e.x += e.vx * dt;
       e.y += e.vy * dt;
-      collideArena(e, w.arena, 0.3);
+      collideArena(e, w.arena, 0.3, 'mine');
       break;
   }
 }

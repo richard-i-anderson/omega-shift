@@ -1,3 +1,5 @@
+import { ambientDanger } from './audio/danger';
+import { AudioEngine } from './audio/engine';
 import { PHYSICS_HZ, WORLD } from './config';
 import { ENEMY_COLORS, Game } from './game';
 import { Input } from './input';
@@ -9,6 +11,8 @@ const canvas = document.getElementById('game') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 const input = new Input(window);
 const game = new Game(new URLSearchParams(location.search).has('debug'));
+const audio = new AudioEngine();
+audio.attach(window);
 
 // Letterbox the fixed logical world into the window, at device resolution.
 let scale = 1;
@@ -43,13 +47,23 @@ function render(): void {
   if (game.showDebug) drawDebug(ctx, game.arena);
 }
 
+/** Play what happened since the last frame; set the background pulse and thrust rumble. */
+function updateSound(): void {
+  for (const e of game.events) audio.play(e);
+  game.events.length = 0;
+  const flying = !game.paused && (game.state === 'playing' || game.state === 'levelClear');
+  audio.updateAmbient(ambientDanger(game), flying && !!game.ship?.thrusting);
+}
+
 let stepped = false;
 startLoop(
   (dt) => {
+    if (input.wasPressed('KeyM')) audio.toggleMute();
     game.update(dt, input);
     stepped = true;
   },
   () => {
+    updateSound();
     // Only drop unhandled key presses once the simulation has seen them.
     if (stepped) input.endFrame();
     stepped = false;

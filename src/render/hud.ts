@@ -55,7 +55,7 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, g: Game): void {
   if (g.state === 'title') {
     text(ctx, 'OMEGA SHIFT', cx, top, 56, COLORS.field);
     if (blink) text(ctx, 'PRESS ENTER', cx, bottom - 20, 22, COLORS.text);
-    text(ctx, '← → ROTATE   ↑ THRUST   SPACE FIRE   H HYPERSPACE   P PAUSE', cx, bottom + 16, 14, COLORS.dimText, 'normal');
+    text(ctx, '← → ROTATE   ↑ THRUST   SPACE FIRE   H HYPERSPACE   P PAUSE   M SOUND', cx, bottom + 16, 14, COLORS.dimText, 'normal');
     return;
   }
   if (g.state === 'levelClear') {
