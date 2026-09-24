@@ -27,6 +27,9 @@ export interface Enemy extends Body {
   jy: number;
   spin: number;
   dead: boolean;
+  /** Position before the latest step, for drawing in between steps. */
+  prevX: number;
+  prevY: number;
 }
 
 export interface EnemyWorld {
@@ -66,6 +69,8 @@ function baseEnemy(kind: EnemyKind, x: number, y: number): Enemy {
     jy: 0,
     spin: rand(0, TAU),
     dead: false,
+    prevX: x,
+    prevY: y,
   };
 }
 

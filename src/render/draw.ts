@@ -6,7 +6,7 @@ import type { Enemy } from '../entities/enemies';
 import type { Particle } from '../entities/particles';
 import type { Ship } from '../entities/ship';
 import { WORLD } from '../config';
-import { TAU } from '../math/vec';
+import { lerp, TAU } from '../math/vec';
 
 export const COLORS = {
   field: '#35e0ff',
@@ -31,54 +31,119 @@ function noGlow(ctx: CanvasRenderingContext2D): void {
   ctx.shadowBlur = 0;
 }
 
-export function drawField(ctx: CanvasRenderingContext2D, f: ForceField): void {
-  glow(ctx, COLORS.field, 10);
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(f.xs[0], f.ys[0]);
-  for (let i = 1; i < N; i++) ctx.lineTo(f.xs[i], f.ys[i]);
-  ctx.closePath();
-  ctx.stroke();
+/**
+ * A cheap stand-in for shadowBlur on long paths: the current path stroked wide
+ * and faint, then narrower, then at full width and brightness. Blurring a path
+ * costs in proportion to its bounding box, which for a force field is most of
+ * the screen.
+ */
+const HALO = [
+  { extra: 10, alpha: 0.05 },
+  { extra: 6, alpha: 0.1 },
+  { extra: 3, alpha: 0.22 },
+];
 
-  // Segments that were just hit flash white.
-  glow(ctx, COLORS.fieldFlash, 16);
-  ctx.lineWidth = 3;
-  for (let i = 0; i < N; i++) {
-    const a = f.flash[i];
-    if (a <= 0) continue;
-    const j = (i + 1) % N;
-    ctx.globalAlpha = a;
-    ctx.beginPath();
-    ctx.moveTo(f.xs[i], f.ys[i]);
-    ctx.lineTo(f.xs[j], f.ys[j]);
+function haloStroke(ctx: CanvasRenderingContext2D, color: string, width: number, alpha = 1, strength = 1): void {
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = color;
+  for (const h of HALO) {
+    ctx.globalAlpha = alpha * Math.min(1, h.alpha * strength);
+    ctx.lineWidth = width + h.extra;
     ctx.stroke();
   }
-  ctx.globalAlpha = 1;
-  noGlow(ctx);
+  ctx.globalAlpha = alpha;
+  ctx.lineWidth = width;
+  ctx.stroke();
 }
 
-function tracePolygon(ctx: CanvasRenderingContext2D, f: ForceField): void {
-  ctx.moveTo(f.xs[0], f.ys[0]);
-  for (let i = 1; i < N; i++) ctx.lineTo(f.xs[i], f.ys[i]);
+/** Flash brightness is drawn in this many steps (one path each). */
+const FLASH_LEVELS = 16;
+const flashBucket = new Uint8Array(N);
+
+/** A field's vertices drawn `alpha` of the way from the previous step to the current one. */
+interface FieldPoints {
+  xs: Float32Array;
+  ys: Float32Array;
+}
+
+const outerPts: FieldPoints = { xs: new Float32Array(N), ys: new Float32Array(N) };
+const innerPts: FieldPoints = { xs: new Float32Array(N), ys: new Float32Array(N) };
+
+function fieldPoints(f: ForceField, alpha: number, out: FieldPoints): FieldPoints {
+  for (let i = 0; i < N; i++) {
+    out.xs[i] = lerp(f.prevXs[i], f.xs[i], alpha);
+    out.ys[i] = lerp(f.prevYs[i], f.ys[i], alpha);
+  }
+  return out;
+}
+
+export function drawField(ctx: CanvasRenderingContext2D, f: ForceField, alpha = 1): void {
+  drawFieldPoints(ctx, f, fieldPoints(f, alpha, f.side === 'outer' ? outerPts : innerPts));
+}
+
+function drawFieldPoints(ctx: CanvasRenderingContext2D, f: ForceField, p: FieldPoints): void {
+  ctx.beginPath();
+  tracePolygon(ctx, p);
+  haloStroke(ctx, COLORS.field, 2);
+
+  // Segments that were just hit flash white. Lit edges are grouped by
+  // brightness into one path per level, so a hit costs a few strokes rather
+  // than one blurred stroke per edge.
+  let lit = 0;
+  for (let i = 0; i < N; i++) {
+    const a = f.flash[i];
+    const b = a > 0 ? Math.ceil(a * FLASH_LEVELS) : 0;
+    flashBucket[i] = b;
+    if (b) lit |= 1 << b;
+  }
+  for (let b = 1; b <= FLASH_LEVELS; b++) {
+    if (!(lit & (1 << b))) continue;
+    ctx.beginPath();
+    let open = false;
+    for (let i = 0; i < N; i++) {
+      if (flashBucket[i] !== b) {
+        open = false;
+        continue;
+      }
+      const j = (i + 1) % N;
+      if (!open) ctx.moveTo(p.xs[i], p.ys[i]);
+      ctx.lineTo(p.xs[j], p.ys[j]);
+      open = true;
+    }
+    haloStroke(ctx, COLORS.fieldFlash, 3, b / FLASH_LEVELS, 1.6);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function tracePolygon(ctx: CanvasRenderingContext2D, p: FieldPoints): void {
+  ctx.moveTo(p.xs[0], p.ys[0]);
+  for (let i = 1; i < N; i++) ctx.lineTo(p.xs[i], p.ys[i]);
   ctx.closePath();
 }
 
 /**
  * Both force fields. The outer one is clipped to outside the inner one: on a
  * chambered level its hub sits inside the score circle and shouldn't show.
+ * (On a connected level the fields never cross, so the clip is skipped.)
  * An inner field shrunk to nothing (score shown outside) isn't drawn.
  */
-export function drawArena(ctx: CanvasRenderingContext2D, arena: Arena): void {
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(0, 0, WORLD.w, WORLD.h);
-  tracePolygon(ctx, arena.inner);
-  ctx.clip('evenodd');
-  drawField(ctx, arena.outer);
-  ctx.restore();
+export function drawArena(ctx: CanvasRenderingContext2D, arena: Arena, alpha = 1): void {
+  const outer = fieldPoints(arena.outer, alpha, outerPts);
+  const inner = fieldPoints(arena.inner, alpha, innerPts);
+  if (arena.isRing) {
+    drawFieldPoints(ctx, arena.outer, outer);
+  } else {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, WORLD.w, WORLD.h);
+    tracePolygon(ctx, inner);
+    ctx.clip('evenodd');
+    drawFieldPoints(ctx, arena.outer, outer);
+    ctx.restore();
+  }
   let innerSize = 0;
   for (let i = 0; i < N; i++) innerSize = Math.max(innerSize, arena.inner.radii[i]);
-  if (innerSize >= 1) drawField(ctx, arena.inner);
+  if (innerSize >= 1) drawFieldPoints(ctx, arena.inner, inner);
 }
 
 /** Draws `points` (unit-scale polygon) at (x, y), rotated and scaled. */
@@ -107,19 +172,22 @@ export function drawShipIcon(ctx: CanvasRenderingContext2D, x: number, y: number
   poly(ctx, x, y, angle, r, SHIP_SHAPE);
 }
 
-export function drawShip(ctx: CanvasRenderingContext2D, ship: Ship, time: number): void {
+export function drawShip(ctx: CanvasRenderingContext2D, ship: Ship, time: number, alpha = 1): void {
   if (ship.invuln > 0 && Math.floor(time * 12) % 2 === 0) return;
+  const x = lerp(ship.prevX, ship.x, alpha);
+  const y = lerp(ship.prevY, ship.y, alpha);
+  const angle = lerp(ship.prevAngle, ship.angle, alpha);
   ctx.lineWidth = 2;
   if (ship.thrusting && Math.floor(time * 30) % 2 === 0) {
     glow(ctx, COLORS.thrust);
-    poly(ctx, ship.x, ship.y, ship.angle, ship.r, [
+    poly(ctx, x, y, angle, ship.r, [
       [-0.7, 0.4],
       [-1.6, 0],
       [-0.7, -0.4],
     ], false);
   }
   glow(ctx, COLORS.ship);
-  drawShipIcon(ctx, ship.x, ship.y, ship.angle, ship.r);
+  drawShipIcon(ctx, x, y, angle, ship.r);
   noGlow(ctx);
 }
 
@@ -129,18 +197,20 @@ const STAR8 = Array.from({ length: 16 }, (_, i) => {
   return [Math.cos(a) * r, Math.sin(a) * r];
 });
 
-export function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, color: string, time: number): void {
+export function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, color: string, time: number, alpha = 1): void {
+  const x = lerp(e.prevX, e.x, alpha);
+  const y = lerp(e.prevY, e.y, alpha);
   ctx.lineWidth = 2;
   glow(ctx, color);
   switch (e.kind) {
     case 'droid':
-      poly(ctx, e.x, e.y, e.spin, e.r, [
+      poly(ctx, x, y, e.spin, e.r, [
         [1, 0],
         [0, 1],
         [-1, 0],
         [0, -1],
       ]);
-      poly(ctx, e.x, e.y, e.spin, e.r * 0.45, [
+      poly(ctx, x, y, e.spin, e.r * 0.45, [
         [1, 0],
         [0, 1],
         [-1, 0],
@@ -149,7 +219,7 @@ export function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, color: string
       break;
     case 'command': {
       const heading = Math.atan2(e.vy, e.vx);
-      poly(ctx, e.x, e.y, heading, e.r, [
+      poly(ctx, x, y, heading, e.r, [
         [1.1, 0],
         [0.3, 0.8],
         [-0.9, 0.8],
@@ -157,7 +227,7 @@ export function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, color: string
         [-0.9, -0.8],
         [0.3, -0.8],
       ]);
-      poly(ctx, e.x, e.y, e.spin, e.r * 0.35, [
+      poly(ctx, x, y, e.spin, e.r * 0.35, [
         [1, 0],
         [0, 1],
         [-1, 0],
@@ -166,12 +236,12 @@ export function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, color: string
       break;
     }
     case 'death':
-      poly(ctx, e.x, e.y, e.spin, e.r, [
+      poly(ctx, x, y, e.spin, e.r, [
         [1, 0],
         [-0.5, 0.87],
         [-0.5, -0.87],
       ]);
-      poly(ctx, e.x, e.y, -e.spin, e.r, [
+      poly(ctx, x, y, -e.spin, e.r, [
         [1, 0],
         [-0.5, 0.87],
         [-0.5, -0.87],
@@ -180,47 +250,49 @@ export function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, color: string
     case 'photon': {
       const pulse = 0.6 + 0.4 * Math.sin(time * 8 + e.phase);
       ctx.globalAlpha = pulse;
-      poly(ctx, e.x, e.y, Math.PI / 4, e.r, [
+      poly(ctx, x, y, Math.PI / 4, e.r, [
         [1, 0],
         [-1, 0],
       ], false);
-      poly(ctx, e.x, e.y, -Math.PI / 4, e.r, [
+      poly(ctx, x, y, -Math.PI / 4, e.r, [
         [1, 0],
         [-1, 0],
       ], false);
       ctx.beginPath();
-      ctx.arc(e.x, e.y, 1.5, 0, TAU);
+      ctx.arc(x, y, 1.5, 0, TAU);
       ctx.fill();
       ctx.globalAlpha = 1;
       break;
     }
     case 'vapor':
-      poly(ctx, e.x, e.y, e.spin, e.r, STAR8);
+      poly(ctx, x, y, e.spin, e.r, STAR8);
       break;
   }
   noGlow(ctx);
 }
 
-export function drawBullets(ctx: CanvasRenderingContext2D, bullets: Bullet[], color: string): void {
+export function drawBullets(ctx: CanvasRenderingContext2D, bullets: Bullet[], color: string, alpha = 1): void {
   glow(ctx, color, 6);
   for (const b of bullets) {
     ctx.beginPath();
-    ctx.arc(b.x, b.y, b.r, 0, TAU);
+    ctx.arc(lerp(b.prevX, b.x, alpha), lerp(b.prevY, b.y, alpha), b.r, 0, TAU);
     ctx.fill();
   }
   noGlow(ctx);
 }
 
-export function drawParticles(ctx: CanvasRenderingContext2D, ps: Particle[]): void {
+export function drawParticles(ctx: CanvasRenderingContext2D, ps: Particle[], alpha = 1): void {
   ctx.lineWidth = 1.5;
   for (const p of ps) {
     ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
     ctx.strokeStyle = p.color;
     const dx = Math.cos(p.angle) * p.len * 0.5;
     const dy = Math.sin(p.angle) * p.len * 0.5;
+    const x = lerp(p.prevX, p.x, alpha);
+    const y = lerp(p.prevY, p.y, alpha);
     ctx.beginPath();
-    ctx.moveTo(p.x - dx, p.y - dy);
-    ctx.lineTo(p.x + dx, p.y + dy);
+    ctx.moveTo(x - dx, y - dy);
+    ctx.lineTo(x + dx, y + dy);
     ctx.stroke();
   }
   ctx.globalAlpha = 1;

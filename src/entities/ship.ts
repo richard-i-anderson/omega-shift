@@ -15,13 +15,28 @@ export class Ship implements Body {
   thrusting = false;
   cooldown = 0;
   hyperCooldown = 0;
+  /** Position and heading before the latest step, for drawing in between steps. */
+  prevX: number;
+  prevY: number;
+  prevAngle: number;
 
   constructor(
     public x: number,
     public y: number,
     public angle: number,
     public invuln: number = SHIP.invulnTime,
-  ) {}
+  ) {
+    this.prevX = x;
+    this.prevY = y;
+    this.prevAngle = angle;
+  }
+
+  /** Remember the current state as the previous one (before a step, or after a jump so it doesn't streak). */
+  snapshot(): void {
+    this.prevX = this.x;
+    this.prevY = this.y;
+    this.prevAngle = this.angle;
+  }
 
   update(dt: number, c: ShipControls, arena: Arena): void {
     if (c.left) this.angle -= SHIP.turnRate * dt;

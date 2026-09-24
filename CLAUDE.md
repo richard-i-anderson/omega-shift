@@ -19,7 +19,7 @@ npm run typecheck    # tsc --noEmit
 npm run build        # typecheck + static bundle in dist/
 ```
 
-Open `http://localhost:5173/?debug` for debug keys: `1`–`9` jump to a level, `` ` `` toggles an overlay showing the orbit track, wall normals, and wall velocity.
+Open `http://localhost:5173/?debug` for debug keys: `1`–`9` jump to a level, `` ` `` toggles an overlay showing the orbit track, wall normals, and wall velocity, and `F` toggles a frame-timing overlay (frame intervals, estimated refresh rate, sim steps per frame, update and render ms).
 
 ## Architecture
 
@@ -33,7 +33,7 @@ Open `http://localhost:5173/?debug` for debug keys: `1`–`9` jump to a level, `
 
 **Collision** (`src/physics/collide.ts`) treats each field as a polygon: the outer one keeps bodies in, the inner one keeps them out. If a body's centre has crossed the polygon (checked exactly along its ray via `polyRadiusAt`), it's moved to the nearest point on the boundary first (nearest point, not along the ray, so radial chamber walls push sideways). If it's still outside the arena after both fields, `collideArena` retries, then moves it to the nearest open track point. Then contacts in a small angular window are resolved **deepest-first**, iterating to handle corners. Velocity is reflected relative to the wall's velocity at the contact point, which is how morphing walls shove things. `tests/stress.test.ts` checks that nothing escapes the corridor or its chamber on any level; run it after touching collision, shapes, or `N`.
 
-**Simulation** runs at a fixed 120 Hz (`src/loop.ts`), rendering once per animation frame. The world is a fixed 1024×768 logical space, letterboxed to the window (`src/main.ts`). `Game` (`src/game.ts`) is the state machine (`title → levelClear → playing → … → gameOver`; `levelClear` doubles as the "get ready" card while the arena morphs to the next level) and owns every entity list. `Game` doesn't touch the DOM, so tests drive it headlessly with a fake `Input` (`tests/game.test.ts`).
+**Simulation** runs at a fixed 120 Hz (`src/loop.ts`), rendering once per animation frame. Rendering is interpolated: `Game.snapshot()` copies every position into `prevX`/`prevY` (`prevXs`/`prevYs` on a `ForceField`) before each step, and the draw functions lerp by `alpha`, the fraction of a step the display is past the latest state. Anything that appears or teleports (spawns, `jumpShip`) must set prev = current, or it streaks. The world is a fixed 1024×768 logical space, letterboxed to the window (`src/main.ts`). `Game` (`src/game.ts`) is the state machine (`title → levelClear → playing → … → gameOver`; `levelClear` doubles as the "get ready" card while the arena morphs to the next level) and owns every entity list. `Game` doesn't touch the DOM, so tests drive it headlessly with a fake `Input` (`tests/game.test.ts`).
 
 **Enemies** (`src/entities/enemies.ts`) are one `Enemy` shape with a `kind`. Droids follow the track; one at a time they're promoted to command ships (track-following, shoot, lay photon mines), which eventually become free-flying death ships (chase the player, bounce off walls, lay vapor mines). Mines stay put but get pushed by moving walls.
 

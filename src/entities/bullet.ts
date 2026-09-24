@@ -4,6 +4,9 @@ import { collideArena, type Body } from '../physics/collide';
 export class Bullet implements Body {
   readonly r = 2;
   dead = false;
+  /** Position before the latest step, for drawing in between steps. */
+  prevX: number;
+  prevY: number;
 
   constructor(
     public x: number,
@@ -11,7 +14,10 @@ export class Bullet implements Body {
     public vx: number,
     public vy: number,
     public life: number,
-  ) {}
+  ) {
+    this.prevX = x;
+    this.prevY = y;
+  }
 
   update(dt: number, arena: Arena): void {
     this.x += this.vx * dt;

@@ -28,6 +28,9 @@ export class ForceField {
   readonly vel = new Float32Array(N);
   readonly xs = new Float32Array(N);
   readonly ys = new Float32Array(N);
+  /** Vertex positions before the latest step, for drawing in between steps. */
+  readonly prevXs = new Float32Array(N);
+  readonly prevYs = new Float32Array(N);
   /** Flash intensity per edge (edge i runs from vertex i to i+1). */
   readonly flash = new Float32Array(N);
 
@@ -37,7 +40,10 @@ export class ForceField {
     readonly cy: number,
   ) {}
 
-  /** Replace the radii. With dt > 0 the change is recorded as wall velocity. */
+  /**
+   * Replace the radii. With dt > 0 the change is recorded as wall velocity;
+   * with dt = 0 it's a jump, so the previous positions are reset too.
+   */
   setRadii(r: ArrayLike<number>, dt = 0): void {
     for (let i = 0; i < N; i++) {
       this.vel[i] = dt > 0 ? (r[i] - this.radii[i]) / dt : 0;
@@ -45,6 +51,13 @@ export class ForceField {
       this.xs[i] = this.cx + r[i] * COS[i];
       this.ys[i] = this.cy + r[i] * SIN[i];
     }
+    if (dt <= 0) this.snapshot();
+  }
+
+  /** Remember the current vertex positions as the previous ones. */
+  snapshot(): void {
+    this.prevXs.set(this.xs);
+    this.prevYs.set(this.ys);
   }
 
   /** Exact distance from the centre to the polygon along angle θ (θ in [0, 2π)). */
