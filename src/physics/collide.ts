@@ -2,6 +2,7 @@ import { COS, DTHETA, ForceField, SIN } from '../arena/field';
 import { N } from '../arena/shapes';
 import type { Arena } from '../arena/arena';
 import { ARENA } from '../config';
+import type { HitSource } from '../events';
 import { normAngle } from '../math/vec';
 
 export interface Body {
@@ -133,22 +134,35 @@ const harder = (a: FieldHit | null, b: FieldHit | null): FieldHit | null =>
   a && b ? (a.impact >= b.impact ? a : b) : (a ?? b);
 
 /**
- * Collide against both fields, flashing any wall hit hard enough. Where the two
- * fields meet (chamber corners, or a corridor pinching shut mid-morph) one
- * field's push can land the body in the other, so it retries once, and as a
- * last resort moves the body to the nearest open stretch of track.
+ * Collide against both fields, flashing any wall hit hard enough. If `source`
+ * is given, a hit that flashes is also recorded on `arena.hits` (for sound).
+ * Where the two fields meet (chamber corners, or a corridor pinching shut
+ * mid-morph) one field's push can land the body in the other, so it retries
+ * once, and as a last resort moves the body to the nearest open stretch of track.
  */
-export function collideArena(b: Body, arena: Arena, restitution: number = ARENA.restitution): FieldHit | null {
+export function collideArena(
+  b: Body,
+  arena: Arena,
+  restitution: number = ARENA.restitution,
+  source?: HitSource,
+): FieldHit | null {
   let best: FieldHit | null = null;
-  for (let pass = 0; pass < 2; pass++) {
+  let flashed = 0;
+  let inside = false;
+  for (let pass = 0; pass < 2 && !inside; pass++) {
     const h1 = collideField(b, arena.outer, restitution);
     const h2 = collideField(b, arena.inner, restitution);
     for (const h of [h1, h2]) {
-      if (h && h.impact >= ARENA.flashImpact) h.field.flashEdge(h.edge);
+      if (h && h.impact >= ARENA.flashImpact) {
+        h.field.flashEdge(h.edge);
+        flashed = Math.max(flashed, h.impact);
+      }
     }
     best = harder(best, harder(h1, h2));
-    if (arena.contains(b.x, b.y)) return best;
+    inside = arena.contains(b.x, b.y);
   }
+  if (source && flashed > 0) arena.hits.push({ impact: flashed, source });
+  if (inside) return best;
   const theta = arena.openAngle(Math.atan2(b.y - arena.cy, b.x - arena.cx), b.r + 2);
   const p = arena.trackPoint(theta);
   b.x = p.x;

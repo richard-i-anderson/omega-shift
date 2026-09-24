@@ -90,3 +90,134 @@ export const ARENA = {
 
 export const LEVEL_CLEAR_SEC = 3;
 export const LEVEL_TRANSITION_SEC = 2.5;
+
+// Sound: synthesised with Web Audio (src/audio/). Frequencies in Hz, times in
+// seconds, gains 0..1 before the master volume. A patch is a list of layers
+// played together: `wave` is an oscillator shape or 'noise'; the pitch (and a
+// filter's cutoff) sweeps exponentially from `freq` to `freqEnd` over the
+// layer's `decay`; `delay` offsets a layer, which is how arpeggios are made.
+export const SOUND = {
+  master: 0.5,
+  storageKey: 'omegaShift.muted',
+  // A force-field hit from the same kind of source plays at most this often.
+  hitThrottle: 0.04,
+  // Field hits scale from their quietest/lowest at ARENA.flashImpact to their
+  // loudest/highest at this impact speed (px/s).
+  hitImpactFull: 450,
+  hitGainRange: [0.35, 1],
+  hitPitchRange: [0.8, 1.3],
+  fieldHit: {
+    // An electric "bzzt": a buzzy square through a bandpass, pitch dropping fast.
+    ship: [
+      { wave: 'square', freq: 220, freqEnd: 70, decay: 0.13, gain: 0.4, filter: { type: 'bandpass', freq: 1000, freqEnd: 300, q: 3 } },
+      { wave: 'noise', decay: 0.05, gain: 0.12, filter: { type: 'bandpass', freq: 2600, q: 2 } },
+    ],
+    // Thin and quiet.
+    shot: [{ wave: 'square', freq: 700, freqEnd: 260, decay: 0.035, gain: 0.12, filter: { type: 'bandpass', freq: 1800, q: 4 } }],
+    enemy: [
+      { wave: 'square', freq: 160, freqEnd: 55, decay: 0.1, gain: 0.3, filter: { type: 'bandpass', freq: 700, freqEnd: 250, q: 3 } },
+    ],
+    // A soft thud.
+    mine: [{ wave: 'triangle', freq: 110, freqEnd: 45, decay: 0.09, gain: 0.3, filter: { type: 'lowpass', freq: 400 } }],
+  },
+  // Background pulse, set by the most dangerous enemy alive. One LFO drives
+  // both pitch (±pitchDepth Hz around freq) and volume (ampDepth 0..1).
+  // Voices crossfade over `ambientFade` seconds when the danger changes.
+  ambientFade: 0.3,
+  pulse: {
+    // Slow low throb, about 55–70 Hz.
+    droid: {
+      wave: 'square', freq: 62, lfoWave: 'sine', lfoRate: 1.2, pitchDepth: 7.5, ampDepth: 0.9, gain: 0.22,
+      filter: { type: 'lowpass', freq: 220, q: 1 },
+    },
+    // Faster, higher two-note warble (a square LFO flips between freq ± pitchDepth).
+    command: {
+      wave: 'square', freq: 190, lfoWave: 'square', lfoRate: 2.5, pitchDepth: 30, ampDepth: 0.25, gain: 0.11,
+      filter: { type: 'lowpass', freq: 1400, q: 1 },
+    },
+    // Frantic rising siren (a sawtooth LFO sweeps up, then snaps back).
+    death: {
+      wave: 'sawtooth', freq: 650, lfoWave: 'sawtooth', lfoRate: 5, pitchDepth: 300, ampDepth: 0.5, gain: 0.08,
+      filter: { type: 'lowpass', freq: 2600, q: 1 },
+    },
+  },
+  // Quiet noise rumble while the ship thrusts.
+  thrust: { gain: 0.14, cutoff: 260, fade: 0.04 },
+  sfx: {
+    shipFire: [{ wave: 'square', freq: 1600, freqEnd: 500, decay: 0.07, gain: 0.1, filter: { type: 'highpass', freq: 400 } }],
+    shipKilled: [
+      { wave: 'noise', decay: 1.6, gain: 0.5, filter: { type: 'lowpass', freq: 3000, freqEnd: 80, q: 1 } },
+      { wave: 'sawtooth', freq: 140, freqEnd: 30, decay: 1.2, gain: 0.25 },
+    ],
+    hyperspace: [
+      { wave: 'triangle', freq: 180, freqEnd: 2400, attack: 0.01, decay: 0.45, gain: 0.25 },
+      { wave: 'noise', decay: 0.3, gain: 0.08, filter: { type: 'bandpass', freq: 800, freqEnd: 5000, q: 2 } },
+    ],
+    // Only command ships shoot: a descending "pew".
+    enemyFire: [{ wave: 'square', freq: 1300, freqEnd: 220, decay: 0.16, gain: 0.15, filter: { type: 'lowpass', freq: 3000 } }],
+    mineLaid: {
+      // Photon mine: a short upward chirp.
+      photon: [
+        { wave: 'triangle', freq: 900, freqEnd: 1900, decay: 0.07, gain: 0.18 },
+        { wave: 'triangle', freq: 1900, freqEnd: 2600, delay: 0.06, decay: 0.05, gain: 0.12 },
+      ],
+      // Vapor mine: a hiss.
+      vapor: [{ wave: 'noise', attack: 0.03, decay: 0.35, gain: 0.14, filter: { type: 'highpass', freq: 3500 } }],
+    },
+    promoted: {
+      // Droid to command ship: a two-note blip up.
+      command: [
+        { wave: 'square', freq: 440, decay: 0.08, gain: 0.1 },
+        { wave: 'square', freq: 660, delay: 0.08, decay: 0.12, gain: 0.1 },
+      ],
+      // Command to death ship: a rising alarm stab, twice.
+      death: [
+        { wave: 'sawtooth', freq: 300, freqEnd: 1200, attack: 0.01, decay: 0.28, gain: 0.18, filter: { type: 'lowpass', freq: 3000 } },
+        { wave: 'sawtooth', freq: 300, freqEnd: 1200, delay: 0.3, attack: 0.01, decay: 0.28, gain: 0.18, filter: { type: 'lowpass', freq: 3000 } },
+      ],
+    },
+    // Harsher the more dangerous the enemy; mines just tick.
+    enemyKilled: {
+      droid: [
+        { wave: 'square', freq: 700, freqEnd: 140, decay: 0.12, gain: 0.2 },
+        { wave: 'noise', decay: 0.08, gain: 0.15, filter: { type: 'bandpass', freq: 1500, q: 1 } },
+      ],
+      command: [
+        { wave: 'noise', decay: 0.4, gain: 0.35, filter: { type: 'bandpass', freq: 1600, freqEnd: 300, q: 0.8 } },
+        { wave: 'square', freq: 300, freqEnd: 50, decay: 0.3, gain: 0.18 },
+      ],
+      death: [
+        { wave: 'noise', decay: 0.9, gain: 0.45, filter: { type: 'lowpass', freq: 5000, freqEnd: 150 } },
+        { wave: 'sawtooth', freq: 220, freqEnd: 35, decay: 0.7, gain: 0.22 },
+      ],
+      photon: [{ wave: 'square', freq: 2400, freqEnd: 1800, decay: 0.025, gain: 0.12 }],
+      vapor: [{ wave: 'square', freq: 1500, freqEnd: 1100, decay: 0.03, gain: 0.12 }],
+    },
+    // Rising arpeggio, C6 E6 G6 C7.
+    extraLife: [
+      { wave: 'square', freq: 1047, decay: 0.09, gain: 0.1 },
+      { wave: 'square', freq: 1319, delay: 0.07, decay: 0.09, gain: 0.1 },
+      { wave: 'square', freq: 1568, delay: 0.14, decay: 0.09, gain: 0.1 },
+      { wave: 'square', freq: 2093, delay: 0.21, decay: 0.25, gain: 0.1 },
+    ],
+    waveStart: [
+      { wave: 'triangle', freq: 220, decay: 0.12, gain: 0.18 },
+      { wave: 'triangle', freq: 440, delay: 0.12, decay: 0.2, gain: 0.18 },
+    ],
+    // Short fanfare, G5 C6 E6 G6.
+    waveCleared: [
+      { wave: 'square', freq: 784, decay: 0.1, gain: 0.1, filter: { type: 'lowpass', freq: 2500 } },
+      { wave: 'square', freq: 1047, delay: 0.11, decay: 0.1, gain: 0.1, filter: { type: 'lowpass', freq: 2500 } },
+      { wave: 'square', freq: 1319, delay: 0.22, decay: 0.1, gain: 0.1, filter: { type: 'lowpass', freq: 2500 } },
+      { wave: 'square', freq: 1568, delay: 0.33, decay: 0.5, gain: 0.12, filter: { type: 'lowpass', freq: 2500 } },
+      { wave: 'triangle', freq: 784, delay: 0.33, decay: 0.5, gain: 0.12 },
+    ],
+    // Falling, C5 G4 E4 C4.
+    gameOver: [
+      { wave: 'square', freq: 523, decay: 0.18, gain: 0.12, filter: { type: 'lowpass', freq: 1800 } },
+      { wave: 'square', freq: 392, delay: 0.2, decay: 0.18, gain: 0.12, filter: { type: 'lowpass', freq: 1800 } },
+      { wave: 'square', freq: 330, delay: 0.4, decay: 0.18, gain: 0.12, filter: { type: 'lowpass', freq: 1800 } },
+      { wave: 'square', freq: 262, delay: 0.6, decay: 0.9, gain: 0.12, filter: { type: 'lowpass', freq: 1800 } },
+    ],
+  },
+} as const;

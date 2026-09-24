@@ -1,3 +1,5 @@
+import { ambientDanger } from './audio/danger';
+import { AudioEngine } from './audio/engine';
 import { PHYSICS_HZ, WORLD } from './config';
 import { ENEMY_COLORS, Game } from './game';
 import { Input } from './input';
@@ -14,6 +16,8 @@ const input = new Input(window);
 const game = new Game(new URLSearchParams(location.search).has('debug'));
 const stars = makeStarfield();
 const perf = new PerfOverlay();
+const audio = new AudioEngine();
+audio.attach(window);
 
 // Letterbox the fixed logical world into the window, at device resolution.
 let scale = 1;
@@ -51,15 +55,25 @@ function render(alpha: number): void {
   perf.draw(ctx);
 }
 
+/** Play what happened since the last frame; set the background pulse and thrust rumble. */
+function updateSound(): void {
+  for (const e of game.events) audio.play(e);
+  game.events.length = 0;
+  const flying = !game.paused && (game.state === 'playing' || game.state === 'levelClear');
+  audio.updateAmbient(ambientDanger(game), flying && !!game.ship?.thrusting);
+}
+
 let stepped = false;
 startLoop(
   (dt) => {
+    if (input.wasPressed('KeyM')) audio.toggleMute();
     if (game.debugEnabled && input.wasPressed('KeyF')) perf.visible = !perf.visible;
     game.snapshot();
     game.update(dt, input);
     stepped = true;
   },
   (alpha) => {
+    updateSound();
     // Only drop unhandled key presses once the simulation has seen them.
     if (stepped) input.endFrame();
     stepped = false;

@@ -56,7 +56,7 @@ export class Ship implements Body {
     }
     this.x += this.vx * dt;
     this.y += this.vy * dt;
-    collideArena(this, arena, SHIP.restitution);
+    collideArena(this, arena, SHIP.restitution, 'ship');
     this.cooldown = Math.max(0, this.cooldown - dt);
     this.hyperCooldown = Math.max(0, this.hyperCooldown - dt);
     this.invuln = Math.max(0, this.invuln - dt);
