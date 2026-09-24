@@ -1,8 +1,8 @@
 import { ARENA, SOUND } from '../config';
 import type { GameEvent, HitSource } from '../events';
 import { clamp } from '../math/vec';
-import type { Danger } from './danger';
-import { noiseVoice, playPatch, pulseVoice, type LoopVoice, type Patch } from './synth';
+import type { Ambient, Danger } from './danger';
+import { crushCurve, droneVoice, noiseVoice, playPatch, pulseVoice, type LoopVoice, type Patch, type PulseVoice } from './synth';
 
 type Store = Pick<Storage, 'getItem' | 'setItem'>;
 
@@ -11,6 +11,19 @@ export interface AudioEngineOptions {
   createContext?: () => AudioContext;
   /** Where the mute setting is remembered; defaults to `localStorage` if available. */
   storage?: Store | null;
+}
+
+type PulseDanger = Exclude<Danger, 'none'>;
+
+/**
+ * The danger pulse's volume and tempo (LFO rate, Hz). Both rise with danger and,
+ * like the Asteroids heartbeat, as the wave thins out (`remaining` falls to 0).
+ */
+export function pulseSettings(danger: PulseDanger, remaining: number): { gain: number; rate: number; freq: number } {
+  const spec = SOUND.pulse[danger];
+  const thin = 1 - clamp(remaining, 0, 1);
+  const u = SOUND.pulseUrgency;
+  return { gain: spec.gain * (1 + u.gain * thin), rate: spec.lfoRate * (1 + u.tempo * thin), freq: spec.freq };
 }
 
 function defaultStorage(): Store | null {
@@ -30,11 +43,17 @@ export class AudioEngine {
   private ctx: AudioContext | null = null;
   /** Set if Web Audio isn't available, so we stop trying. */
   private failed = false;
+  /** Mute control, after the bit-crusher. */
   private master: GainNode | null = null;
-  private pulses: Partial<Record<Danger, LoopVoice>> = {};
+  /** Where every voice connects. */
+  private bus: GainNode | null = null;
+  private pulses: Partial<Record<PulseDanger, PulseVoice>> = {};
+  private drone: LoopVoice | null = null;
   private thrust: LoopVoice | null = null;
-  private danger: Danger = 'none';
+  private ambient: Ambient = { danger: 'none', remaining: 1, bed: 'off' };
   private thrusting = false;
+  /** When the next title-screen attract jingle is due (context time), or -1 when not on the title. */
+  private nextAttract = -1;
   private readonly lastHit: Record<HitSource, number> = { ship: -1, shot: -1, enemy: -1, mine: -1 };
   private readonly createContext: () => AudioContext;
   private readonly storage: Store | null;
@@ -81,22 +100,35 @@ export class AudioEngine {
 
   private build(ctx: AudioContext): void {
     this.ctx = ctx;
-    // A gentle compressor keeps pile-ups (explosions over the siren) from clipping.
+    // The compressor keeps pile-ups (an explosion over the siren) from clipping.
     const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -12;
-    comp.ratio.value = 4;
+    comp.threshold.value = SOUND.compressor.threshold;
+    comp.ratio.value = SOUND.compressor.ratio;
     comp.connect(ctx.destination);
     this.master = ctx.createGain();
     this.master.gain.value = this.muted ? 0 : SOUND.master;
     this.master.connect(comp);
-    for (const d of ['droid', 'command', 'death'] as const) this.pulses[d] = pulseVoice(ctx, this.master, SOUND.pulse[d]);
-    this.thrust = noiseVoice(ctx, this.master, SOUND.thrust.gain, SOUND.thrust.cutoff);
+    // Bit-crush: part of the bus goes through a stair-step WaveShaper for DAC grit.
+    this.bus = ctx.createGain();
+    const dry = ctx.createGain();
+    dry.gain.value = 1 - SOUND.crush.mix;
+    const wet = ctx.createGain();
+    wet.gain.value = SOUND.crush.mix;
+    const shaper = ctx.createWaveShaper();
+    shaper.curve = crushCurve(SOUND.crush.bits);
+    shaper.oversample = 'none';
+    this.bus.connect(dry).connect(this.master);
+    this.bus.connect(shaper).connect(wet).connect(this.master);
+
+    for (const d of ['droid', 'command', 'death'] as const) this.pulses[d] = pulseVoice(ctx, this.bus, SOUND.pulse[d]);
+    this.drone = droneVoice(ctx, this.bus, SOUND.drone);
+    this.thrust = noiseVoice(ctx, this.bus, SOUND.thrust.gain, SOUND.thrust.cutoff);
     // Voices start silent; bring up whatever should be playing now.
-    const d = this.danger;
+    const a = this.ambient;
     const t = this.thrusting;
-    this.danger = 'none';
+    this.ambient = { danger: 'none', remaining: 1, bed: 'off' };
     this.thrusting = false;
-    this.updateAmbient(d, t);
+    this.updateAmbient(a, t);
   }
 
   toggleMute(): void {
@@ -120,12 +152,12 @@ export class AudioEngine {
 
   private get live(): BaseAudioContext | null {
     const ctx = this.ctx;
-    return ctx && this.master && !this.muted && ctx.state === 'running' ? ctx : null;
+    return ctx && this.bus && !this.muted && ctx.state === 'running' ? ctx : null;
   }
 
   private patch(p: Patch, gain = 1, pitch = 1): void {
     const ctx = this.live;
-    if (ctx) playPatch(ctx, this.master!, p, { gain, pitch });
+    if (ctx) playPatch(ctx, this.bus!, p, { gain, pitch });
   }
 
   /** Play the one-shot for a game event. */
@@ -171,22 +203,41 @@ export class AudioEngine {
     this.patch(SOUND.fieldHit[source], g0 + (g1 - g0) * k, p0 + (p1 - p0) * k);
   }
 
-  /** Set the background pulse and the thrust rumble; call once per frame. */
-  updateAmbient(danger: Danger, thrusting: boolean): void {
+  /** Set the drone, the danger pulse, the attract jingle and the thrust rumble; call once per frame. */
+  updateAmbient(a: Ambient, thrusting: boolean): void {
     const ctx = this.ctx;
     if (!ctx) {
       // Remember it for when the context is created.
-      this.danger = danger;
+      this.ambient = a;
       this.thrusting = thrusting;
       return;
     }
-    if (danger !== this.danger) {
-      this.danger = danger;
-      for (const [d, v] of Object.entries(this.pulses) as [Danger, LoopVoice][]) v.setLevel(d === danger, SOUND.ambientFade);
+    const prev = this.ambient;
+    this.ambient = a;
+    if (a.bed !== prev.bed) this.drone?.setLevel(a.bed === 'play', SOUND.drone.fade);
+    if (a.danger !== prev.danger || a.remaining !== prev.remaining) {
+      for (const [d, v] of Object.entries(this.pulses) as [PulseDanger, PulseVoice][]) {
+        const s = pulseSettings(d, a.remaining);
+        v.set(d === a.danger ? s.gain : 0, s.rate, SOUND.ambientFade);
+      }
     }
     if (thrusting !== this.thrusting) {
       this.thrusting = thrusting;
       this.thrust?.setLevel(thrusting, SOUND.thrust.fade);
     }
+    this.attract(a.bed === 'title');
+  }
+
+  /** On the title screen, play the attract jingle shortly after audio unlocks, then every `attract.every` seconds. */
+  private attract(onTitle: boolean): void {
+    const now = this.ctx!.currentTime;
+    if (!onTitle) {
+      this.nextAttract = -1;
+      return;
+    }
+    if (this.nextAttract < 0) this.nextAttract = now + SOUND.attract.first;
+    if (now < this.nextAttract) return;
+    this.nextAttract = now + SOUND.attract.every;
+    this.patch(SOUND.attract.jingle); // silent while muted, but keeps its schedule
   }
 }
