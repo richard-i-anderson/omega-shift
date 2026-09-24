@@ -15,23 +15,26 @@ function rng(seed: number) {
 // Long simulations; CI runners are several times slower than a laptop.
 const SIM_TIMEOUT_MS = 60_000;
 
-describe('bodies stay in the corridor', () => {
+describe('bodies stay in the corridor (and in their chamber)', () => {
   it.each(LEVELS.map((l) => [l.name, l] as const))('%s: 200 fast bodies for 60 simulated seconds', (_, lvl) => {
     const rand = rng(42);
     const arena = new Arena(512, 384, lvl.keyframes, lvl.loop);
     const dt = 1 / 120;
     const bodies: Body[] = [];
+    const home: number[] = [];
     for (let i = 0; i < 200; i++) {
-      const theta = rand() * Math.PI * 2;
+      const theta = arena.openAngle(rand() * Math.PI * 2, 30);
+      home.push(arena.chamberAt(theta));
       const p = arena.trackPoint(theta, (rand() - 0.5) * 40);
       const a = rand() * Math.PI * 2;
       const s = 100 + rand() * 600;
       bodies.push({ x: p.x, y: p.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, r: 2 + rand() * 10 });
     }
     let worst = 0;
+    let strays = 0;
     for (let step = 0; step < 60 * 120; step++) {
       arena.update(dt);
-      for (const b of bodies) {
+      for (const [i, b] of bodies.entries()) {
         b.x += b.vx * dt;
         b.y += b.vy * dt;
         collideArena(b, arena, 1);
@@ -40,8 +43,10 @@ describe('bodies stay in the corridor', () => {
         // How far the centre sits past either wall (0 when properly inside).
         const out = Math.max(d - arena.outer.polyRadiusAt(theta), arena.inner.polyRadiusAt(theta) - d, 0);
         worst = Math.max(worst, out);
+        if (arena.chamberAt(theta) !== home[i]) strays++;
       }
     }
     expect(worst).toBeLessThan(0.5);
+    expect(strays).toBe(0);
   }, SIM_TIMEOUT_MS);
 });

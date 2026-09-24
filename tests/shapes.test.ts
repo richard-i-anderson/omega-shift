@@ -30,4 +30,22 @@ describe('shape radius functions', () => {
     expect(radiusAt(hex, 0)).toBeCloseTo(100);
     expect(radiusAt(hex, Math.PI / 6)).toBeCloseTo(100 * Math.cos(Math.PI / 6));
   });
+
+  it('star reaches its tips and its inner corners', () => {
+    const star = { kind: 'star', points: 5, rx: 300, ry: 300, valley: 0.5 } as const;
+    expect(radiusAt(star, 0)).toBeCloseTo(300);
+    expect(radiusAt(star, Math.PI / 5)).toBeCloseTo(150);
+    expect(radiusAt(star, (2 * Math.PI) / 5)).toBeCloseTo(300);
+  });
+
+  it('maltese cross: notch on the arm axis, corners at the arm edge, hub between arms', () => {
+    const w = Math.PI / 6;
+    const m = { kind: 'maltese', armX: 400, armY: 300, halfAngle: w, notch: 50, hub: 40 } as const;
+    expect(radiusAt(m, 0)).toBeCloseTo(400 * Math.cos(w) - 50);
+    expect(radiusAt(m, Math.PI / 2)).toBeCloseTo(300 * Math.cos(w) - 50);
+    expect(radiusAt(m, w - 1e-6)).toBeCloseTo(400, 1);
+    // Between the arms the outline is a chord across the hub.
+    expect(radiusAt(m, Math.PI / 4)).toBeLessThanOrEqual(40);
+    expect(radiusAt(m, Math.PI / 4)).toBeGreaterThan(30);
+  });
 });

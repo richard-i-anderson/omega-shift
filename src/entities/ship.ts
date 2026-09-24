@@ -14,6 +14,7 @@ export class Ship implements Body {
   readonly r = SHIP.radius;
   thrusting = false;
   cooldown = 0;
+  hyperCooldown = 0;
 
   constructor(
     public x: number,
@@ -42,6 +43,7 @@ export class Ship implements Body {
     this.y += this.vy * dt;
     collideArena(this, arena, SHIP.restitution);
     this.cooldown = Math.max(0, this.cooldown - dt);
+    this.hyperCooldown = Math.max(0, this.hyperCooldown - dt);
     this.invuln = Math.max(0, this.invuln - dt);
   }
 

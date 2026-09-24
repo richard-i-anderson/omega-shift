@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { Arena } from '../src/arena/arena';
 import { ForceField } from '../src/arena/field';
 import { sampleShape } from '../src/arena/shapes';
-import { collideField, type Body } from '../src/physics/collide';
+import { collideArena, collideField, type Body } from '../src/physics/collide';
 
 function field(side: 'outer' | 'inner', spec: Parameters<typeof sampleShape>[0]): ForceField {
   const f = new ForceField(side, 0, 0);
@@ -69,5 +70,25 @@ describe('collideField', () => {
     collideField(b, f, 1);
     expect(b.vy).toBeGreaterThan(0);
     expect(b.y).toBeGreaterThanOrEqual(-90.5);
+  });
+
+  it('a fast body crossing a radial chamber wall is pushed back sideways, not along its ray', () => {
+    const w = Math.PI / 6;
+    const arena = new Arena(0, 0, [
+      {
+        outer: { kind: 'maltese', armX: 400, armY: 300, halfAngle: w, notch: 50, hub: 40 },
+        inner: { kind: 'circle', r: 80 },
+        holdSec: 0,
+        morphSec: 0,
+      },
+    ], false);
+    // Just past the right arm's lower wall (at angle w), heading further out of it.
+    const r = 250;
+    const b = body(r * Math.cos(w + 0.01), r * Math.sin(w + 0.01), -300, 500, 2);
+    collideArena(b, arena, 1);
+    const theta = Math.atan2(b.y, b.x);
+    expect(arena.chamberAt(theta)).toBe(arena.chamberAt(0));
+    expect(Math.hypot(b.x, b.y)).toBeCloseTo(r, -1);
+    expect(arena.contains(b.x, b.y)).toBe(true);
   });
 });

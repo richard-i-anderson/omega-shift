@@ -5,6 +5,7 @@ import type { Bullet } from '../entities/bullet';
 import type { Enemy } from '../entities/enemies';
 import type { Particle } from '../entities/particles';
 import type { Ship } from '../entities/ship';
+import { WORLD } from '../config';
 import { TAU } from '../math/vec';
 
 export const COLORS = {
@@ -54,6 +55,30 @@ export function drawField(ctx: CanvasRenderingContext2D, f: ForceField): void {
   }
   ctx.globalAlpha = 1;
   noGlow(ctx);
+}
+
+function tracePolygon(ctx: CanvasRenderingContext2D, f: ForceField): void {
+  ctx.moveTo(f.xs[0], f.ys[0]);
+  for (let i = 1; i < N; i++) ctx.lineTo(f.xs[i], f.ys[i]);
+  ctx.closePath();
+}
+
+/**
+ * Both force fields. The outer one is clipped to outside the inner one: on a
+ * chambered level its hub sits inside the score circle and shouldn't show.
+ * An inner field shrunk to nothing (score shown outside) isn't drawn.
+ */
+export function drawArena(ctx: CanvasRenderingContext2D, arena: Arena): void {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, WORLD.w, WORLD.h);
+  tracePolygon(ctx, arena.inner);
+  ctx.clip('evenodd');
+  drawField(ctx, arena.outer);
+  ctx.restore();
+  let innerSize = 0;
+  for (let i = 0; i < N; i++) innerSize = Math.max(innerSize, arena.inner.radii[i]);
+  if (innerSize >= 1) drawField(ctx, arena.inner);
 }
 
 /** Draws `points` (unit-scale polygon) at (x, y), rotated and scaled. */
@@ -201,16 +226,23 @@ export function drawParticles(ctx: CanvasRenderingContext2D, ps: Particle[]): vo
   ctx.globalAlpha = 1;
 }
 
-/** Debug overlay: the orbit track and wall normals (with wall velocity in orange). */
+/** Debug overlay: the orbit track (where open) and wall normals (with wall velocity in orange). */
 export function drawDebug(ctx: CanvasRenderingContext2D, arena: Arena): void {
   ctx.lineWidth = 1;
   ctx.strokeStyle = COLORS.debug;
   ctx.setLineDash([4, 6]);
   ctx.beginPath();
-  for (let i = 0; i <= 128; i++) {
-    const p = arena.trackPoint((i / 128) * TAU);
-    if (i === 0) ctx.moveTo(p.x, p.y);
+  let drawing = false;
+  for (let i = 0; i <= 256; i++) {
+    const theta = (i / 256) * TAU;
+    if (arena.chamberAt(theta) < 0) {
+      drawing = false;
+      continue;
+    }
+    const p = arena.trackPoint(theta);
+    if (!drawing) ctx.moveTo(p.x, p.y);
     else ctx.lineTo(p.x, p.y);
+    drawing = true;
   }
   ctx.stroke();
   ctx.setLineDash([]);

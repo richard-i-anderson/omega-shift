@@ -46,6 +46,14 @@ export const SCORE = {
   extraLifeEvery: 40000,
 } as const;
 
+// H jumps the ship: to the next chamber clockwise on chambered levels,
+// otherwise to a random spot on the track.
+export const HYPERSPACE = {
+  cooldown: 1.5,
+  // Invulnerability on arrival, seconds.
+  invuln: 0.75,
+} as const;
+
 export const START_LIVES = 3;
 
 export const ARENA = {

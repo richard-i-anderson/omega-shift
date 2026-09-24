@@ -2,7 +2,7 @@ import { PHYSICS_HZ, WORLD } from './config';
 import { ENEMY_COLORS, Game } from './game';
 import { Input } from './input';
 import { startLoop } from './loop';
-import { COLORS, drawBullets, drawDebug, drawEnemy, drawField, drawParticles, drawShip } from './render/draw';
+import { COLORS, drawArena, drawBullets, drawDebug, drawEnemy, drawParticles, drawShip } from './render/draw';
 import { drawHud, drawOverlay } from './render/hud';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
@@ -32,8 +32,7 @@ function render(): void {
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
 
-  drawField(ctx, game.arena.outer);
-  drawField(ctx, game.arena.inner);
+  drawArena(ctx, game.arena);
   for (const e of game.enemies) drawEnemy(ctx, e, ENEMY_COLORS[e.kind], game.time);
   drawBullets(ctx, game.enemyBullets, COLORS.enemyBullet);
   drawBullets(ctx, game.bullets, COLORS.bullet);

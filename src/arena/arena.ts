@@ -1,4 +1,4 @@
-import { ForceField } from './field';
+import { DTHETA, ForceField } from './field';
 import { N, sampleShape, type ShapeSpec } from './shapes';
 import { normAngle, smoothstep } from '../math/vec';
 
@@ -32,22 +32,82 @@ function blend(a: ArrayLike<number>, b: ArrayLike<number>, t: number, out: Float
 }
 
 /**
+ * A stretch of open corridor: `len` samples from sample index `start`, going
+ * clockwise on screen (increasing θ). Where the inner field reaches past the
+ * outer one the corridor is closed, which splits the arena into chambers.
+ */
+export interface Chamber {
+  start: number;
+  len: number;
+}
+
+/** The open stretches of corridor, in clockwise order. Fills `chamberOf` (sample → chamber, -1 if closed). */
+export function findChambers(outer: ArrayLike<number>, inner: ArrayLike<number>, chamberOf?: Int16Array): Chamber[] {
+  let closed = -1;
+  for (let i = 0; i < N && closed < 0; i++) if (outer[i] - inner[i] <= 0) closed = i;
+  if (closed < 0) {
+    chamberOf?.fill(0);
+    return [{ start: 0, len: N }];
+  }
+  const chambers: Chamber[] = [];
+  let cur: Chamber | null = null;
+  for (let k = 1; k <= N; k++) {
+    const i = (closed + k) % N;
+    if (outer[i] - inner[i] > 0) {
+      if (!cur) chambers.push((cur = { start: i, len: 0 }));
+      cur.len++;
+      if (chamberOf) chamberOf[i] = chambers.length - 1;
+    } else {
+      cur = null;
+      if (chamberOf) chamberOf[i] = -1;
+    }
+  }
+  return chambers;
+}
+
+export interface ValidateOptions {
+  /** The level shows the score outside the outer field, so the inner field may be tiny or absent. */
+  scoreOutside?: boolean;
+}
+
+/**
  * Checks that every keyframe leaves a corridor of at least `minGap` between the
  * fields and an inner field big enough for the score. Because morphs are linear
  * blends of the radius arrays, keyframes passing this check means every
  * in-between shape passes too.
+ *
+ * Chambered keyframes (the inner field reaches past the outer one somewhere)
+ * must have steep dividing walls: every sample is either open by `minGap` or
+ * closed, and each chamber is at least `minGap` wide along the track. They can't
+ * be part of a morphing level, since blending would pinch corridors shut mid-play.
  */
-export function validateKeyframes(keyframes: Keyframe[], minGap: number, minInnerRadius: number): string[] {
+export function validateKeyframes(
+  keyframes: Keyframe[],
+  minGap: number,
+  minInnerRadius: number,
+  opts: ValidateOptions = {},
+): string[] {
   const errors: string[] = [];
   sampleKeyframes(keyframes).forEach((k, idx) => {
     let gap = Infinity;
     let inner = Infinity;
     for (let i = 0; i < N; i++) {
-      gap = Math.min(gap, k.outer[i] - k.inner[i]);
+      const g = k.outer[i] - k.inner[i];
+      if (g > 0) gap = Math.min(gap, g);
       inner = Math.min(inner, k.inner[i]);
     }
     if (gap < minGap) errors.push(`keyframe ${idx}: corridor ${gap.toFixed(1)} < ${minGap}`);
-    if (inner < minInnerRadius) errors.push(`keyframe ${idx}: inner radius ${inner.toFixed(1)} < ${minInnerRadius}`);
+    if (!opts.scoreOutside && inner < minInnerRadius) {
+      errors.push(`keyframe ${idx}: inner radius ${inner.toFixed(1)} < ${minInnerRadius}`);
+    }
+    const chambers = findChambers(k.outer, k.inner);
+    if (chambers.length === 1 && chambers[0].len === N) return;
+    if (keyframes.length > 1) errors.push(`keyframe ${idx}: chambered keyframes can't be part of a morph`);
+    chambers.forEach((c, ci) => {
+      const mid = (c.start + (c.len >> 1)) % N;
+      const width = c.len * DTHETA * ((k.outer[mid] + k.inner[mid]) / 2);
+      if (width < minGap) errors.push(`keyframe ${idx}: chamber ${ci} is ${width.toFixed(1)} wide < ${minGap}`);
+    });
   });
   return errors;
 }
@@ -62,6 +122,9 @@ export class Arena {
   private transition: { outer: Float32Array; inner: Float32Array; t: number; dur: number } | null = null;
   private readonly bufOuter = new Float32Array(N);
   private readonly bufInner = new Float32Array(N);
+  /** Open stretches of corridor; a single chamber of length N when it's one connected ring. */
+  chambers: Chamber[] = [];
+  private readonly chamberOf = new Int16Array(N);
 
   constructor(
     readonly cx: number,
@@ -91,6 +154,7 @@ export class Arena {
       this.timelineAt(0, this.bufOuter, this.bufInner);
       this.outer.setRadii(this.bufOuter);
       this.inner.setRadii(this.bufInner);
+      this.chambers = findChambers(this.outer.radii, this.inner.radii, this.chamberOf);
     }
   }
 
@@ -112,6 +176,7 @@ export class Arena {
     }
     this.outer.setRadii(this.bufOuter, dt);
     this.inner.setRadii(this.bufInner, dt);
+    this.chambers = findChambers(this.outer.radii, this.inner.radii, this.chamberOf);
     this.outer.update(dt);
     this.inner.update(dt);
   }
@@ -163,5 +228,57 @@ export class Arena {
   trackPoint(theta: number, offset = 0): { x: number; y: number } {
     const r = this.trackRadius(theta) + offset;
     return { x: this.cx + r * Math.cos(theta), y: this.cy + r * Math.sin(theta) };
+  }
+
+  /** True when the corridor is one connected ring (no isolated chambers). */
+  get isRing(): boolean {
+    return this.chambers.length === 1 && this.chambers[0].len === N;
+  }
+
+  /** Index into `chambers` of the corridor at θ, or -1 where it's closed. */
+  chamberAt(theta: number): number {
+    // The edge between a closed and an open sample is a dividing wall, and the
+    // part of that interval in front of it belongs to the open side's chamber.
+    const i = Math.floor(normAngle(theta) / DTHETA) % N;
+    const c = this.chamberOf[i];
+    return c >= 0 ? c : this.chamberOf[(i + 1) % N];
+  }
+
+  chamberAtPoint(x: number, y: number): number {
+    return this.chamberAt(Math.atan2(y - this.cy, x - this.cx));
+  }
+
+  /** Angle `frac` of the way through chamber `c` (0.5 = its middle). */
+  chamberAngle(c: number, frac = 0.5): number {
+    const ch = this.chambers[c];
+    return normAngle((ch.start + frac * (ch.len - 1)) * DTHETA);
+  }
+
+  /** True if (x, y) is inside the outer field and outside the inner one. */
+  contains(x: number, y: number, tolerance = 0.05): boolean {
+    const dx = x - this.cx;
+    const dy = y - this.cy;
+    const d = Math.hypot(dx, dy);
+    const a = normAngle(Math.atan2(dy, dx));
+    return d <= this.outer.polyRadiusAt(a) + tolerance && d >= this.inner.polyRadiusAt(a) - tolerance;
+  }
+
+  /** The angle nearest θ where the corridor's half-width is at least `clearance`. */
+  openAngle(theta: number, clearance: number): number {
+    const a0 = normAngle(theta);
+    if (this.halfGap(a0) >= clearance) return a0;
+    let best = a0;
+    let bestGap = -Infinity;
+    for (let k = 1; k <= N >> 1; k++) {
+      for (const a of [a0 + k * DTHETA, a0 - k * DTHETA]) {
+        const g = this.halfGap(a);
+        if (g >= clearance) return normAngle(a);
+        if (g > bestGap) {
+          bestGap = g;
+          best = a;
+        }
+      }
+    }
+    return normAngle(best);
   }
 }

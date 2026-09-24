@@ -15,9 +15,26 @@ function text(ctx: CanvasRenderingContext2D, s: string, x: number, y: number, si
   ctx.shadowBlur = 0;
 }
 
-/** Score, level and lives, drawn inside the inner force field. */
+const PANEL_W = 170;
+const PANEL_H = 88;
+
+/**
+ * Score, level and lives: inside the inner force field, or in a panel outside
+ * the arena on levels with no room there (it fades in as the score moves out).
+ */
 export function drawHud(ctx: CanvasRenderingContext2D, g: Game): void {
-  const { cx, cy } = WORLD;
+  const { x: cx, y: cy } = g.hudPos;
+  const out = Math.min(1, Math.hypot(cx - WORLD.cx, cy - WORLD.cy) / 150);
+  if (out > 0) {
+    ctx.globalAlpha = out;
+    ctx.strokeStyle = COLORS.field;
+    ctx.shadowColor = COLORS.field;
+    ctx.shadowBlur = 10;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(cx - PANEL_W / 2, cy - PANEL_H / 2, PANEL_W, PANEL_H);
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+  }
   text(ctx, `LEVEL ${g.levelIndex + 1}`, cx, cy - 30, 12, COLORS.dimText);
   text(ctx, String(g.score).padStart(6, '0'), cx, cy, 26, COLORS.text);
   const shown = Math.min(g.lives - (g.ship ? 1 : 0), 6);
@@ -38,7 +55,7 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, g: Game): void {
   if (g.state === 'title') {
     text(ctx, 'OMEGA SHIFT', cx, top, 56, COLORS.field);
     if (blink) text(ctx, 'PRESS ENTER', cx, bottom - 20, 22, COLORS.text);
-    text(ctx, '← → ROTATE   ↑ THRUST   SPACE FIRE   P PAUSE', cx, bottom + 16, 14, COLORS.dimText, 'normal');
+    text(ctx, '← → ROTATE   ↑ THRUST   SPACE FIRE   H HYPERSPACE   P PAUSE', cx, bottom + 16, 14, COLORS.dimText, 'normal');
     return;
   }
   if (g.state === 'levelClear') {

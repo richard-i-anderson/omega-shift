@@ -1,13 +1,13 @@
 import { Arena } from './arena/arena';
-import { validateKeyframes } from './arena/arena';
+import { DTHETA } from './arena/field';
 import { Bullet } from './entities/bullet';
 import { isHunter, isMine, makeDroid, makeMine, promote, updateEnemy, type Enemy, type EnemyWorld } from './entities/enemies';
 import { explode, updateParticles, type Particle } from './entities/particles';
 import { Ship } from './entities/ship';
-import { ARENA, ENEMY, LEVEL_CLEAR_SEC, LEVEL_TRANSITION_SEC, SCORE, SHIP, START_LIVES, WORLD } from './config';
+import { ENEMY, HYPERSPACE, LEVEL_CLEAR_SEC, LEVEL_TRANSITION_SEC, SCORE, SHIP, START_LIVES, WORLD } from './config';
 import type { Input } from './input';
-import { LEVELS, levelFor } from './levels/levels';
-import { dist2, rand, TAU } from './math/vec';
+import { LEVELS, levelFor, validateLevel } from './levels/levels';
+import { dist2, rand, smoothstep, TAU } from './math/vec';
 
 export type GameState = 'title' | 'playing' | 'levelClear' | 'gameOver';
 
@@ -22,7 +22,9 @@ export const ENEMY_COLORS: Record<Enemy['kind'], string> = {
 /** Where the player (re)spawns and where droids start: opposite sides of the track. */
 const SHIP_SPAWN_THETA = Math.PI;
 const DROID_SPAWN_THETA = 0;
-const DROID_SPACING = 0.2;
+/** Pixels between droids along the track when a wave spawns. */
+const DROID_SPACING = 50;
+const HYPER_COLOR = '#35e0ff';
 
 export class Game {
   state: GameState = 'title';
@@ -49,11 +51,16 @@ export class Game {
   justCleared = false;
   private respawnTimer = 0;
   private promoteTimer = 0;
+  /** The score readout glides between levels' score positions. */
+  private hudFrom: { x: number; y: number } = { x: WORLD.cx, y: WORLD.cy };
+  private hudTo: { x: number; y: number } = { x: WORLD.cx, y: WORLD.cy };
+  private hudT = 0;
+  private hudDur = 0;
 
   constructor(debugEnabled: boolean) {
     this.debugEnabled = debugEnabled;
     for (const lvl of LEVELS) {
-      const errors = validateKeyframes(lvl.keyframes, ARENA.minGap, ARENA.minInnerRadius);
+      const errors = validateLevel(lvl);
       if (errors.length) console.error(`Level ${lvl.name} is invalid:\n${errors.join('\n')}`);
     }
     // The title screen shows the morphing level in the background.
@@ -63,6 +70,15 @@ export class Game {
 
   get levelName(): string {
     return levelFor(this.levelIndex).def.name;
+  }
+
+  /** Where the score readout is drawn. */
+  get hudPos(): { x: number; y: number } {
+    const s = this.hudDur > 0 ? smoothstep(this.hudT / this.hudDur) : 1;
+    return {
+      x: this.hudFrom.x + (this.hudTo.x - this.hudFrom.x) * s,
+      y: this.hudFrom.y + (this.hudTo.y - this.hudFrom.y) * s,
+    };
   }
 
   update(dt: number, input: Input): void {
@@ -83,6 +99,7 @@ export class Game {
     this.time += dt;
     this.stateTimer -= dt;
     this.arena.update(dt);
+    this.hudT += dt;
     updateParticles(this.particles, dt);
 
     switch (this.state) {
@@ -121,6 +138,10 @@ export class Game {
     this.levelIndex = index;
     this.scale = scale;
     this.arena.setLevel(def.keyframes, def.loop, transitionSec);
+    this.hudFrom = this.hudPos;
+    this.hudTo = def.scoreAt ?? { x: WORLD.cx, y: WORLD.cy };
+    this.hudT = 0;
+    this.hudDur = transitionSec;
     this.enemies = [];
     this.enemyBullets = [];
     this.state = 'levelClear';
@@ -131,14 +152,57 @@ export class Game {
   private spawnWave(): void {
     const { def, cycle } = levelFor(this.levelIndex);
     const count = def.droids + 2 * cycle;
+    const arena = this.arena;
+    if (!this.ship) this.spawnShip(arena.openAngle(SHIP_SPAWN_THETA, SHIP.radius + 10));
     this.enemies = [];
-    for (let i = 0; i < count; i++) {
-      const theta = DROID_SPAWN_THETA + (i - (count - 1) / 2) * DROID_SPACING;
-      this.enemies.push(makeDroid(this.arena, theta));
+    if (arena.isRing) {
+      for (const theta of this.trackSpread(DROID_SPAWN_THETA, count, DROID_SPACING)) {
+        this.enemies.push(makeDroid(arena, theta));
+      }
+    } else {
+      // Share the droids between the chambers the ship isn't in, so the player
+      // has to hyperspace to reach them.
+      const here = arena.chamberAtPoint(this.ship!.x, this.ship!.y);
+      let targets = arena.chambers.map((_, i) => i).filter((i) => i !== here);
+      if (!targets.length) targets = [0];
+      targets.forEach((c, ti) => {
+        const n = Math.floor(count / targets.length) + (ti < count % targets.length ? 1 : 0);
+        const mid = arena.chamberAngle(c);
+        const width = arena.chambers[c].len * DTHETA * arena.trackRadius(mid);
+        const spacing = Math.min(DROID_SPACING, (width * 0.6) / Math.max(n, 1));
+        for (const theta of this.trackSpread(mid, n, spacing)) this.enemies.push(makeDroid(this.arena, theta));
+      });
     }
-    if (!this.ship) this.spawnShip(SHIP_SPAWN_THETA);
     this.promoteTimer = ENEMY.promoteEvery / this.scale;
     this.state = 'playing';
+  }
+
+  /** `n` track angles centred on `theta`, `gap` pixels apart along the track. */
+  private trackSpread(theta: number, n: number, gap: number): number[] {
+    const half: number[] = [];
+    const walk = (dir: number, count: number, first: number) => {
+      const out: number[] = [];
+      let t = theta;
+      let p = this.arena.trackPoint(t);
+      let want = first;
+      while (out.length < count) {
+        t += dir * 0.002;
+        const q = this.arena.trackPoint(t);
+        want -= Math.hypot(q.x - p.x, q.y - p.y);
+        p = q;
+        if (want <= 0) {
+          out.push(t);
+          want = gap;
+        }
+      }
+      return out;
+    };
+    // Odd counts put one droid on `theta`; even counts straddle it.
+    const odd = n % 2 === 1;
+    if (odd) half.push(theta);
+    const side = Math.floor(n / 2);
+    const first = odd ? gap : gap / 2;
+    return [...walk(-1, side, first).reverse(), ...half, ...walk(1, side, first)];
   }
 
   private spawnShip(theta: number): void {
@@ -148,10 +212,15 @@ export class Game {
 
   /** Respawn on the track wherever is furthest from anything dangerous. */
   private respawnShip(): void {
-    let bestTheta = SHIP_SPAWN_THETA;
+    this.spawnShip(this.safestAngle(Array.from({ length: 16 }, (_, i) => (i / 16) * TAU)));
+  }
+
+  /** Of the candidate track angles with room for the ship, the one furthest from any danger. */
+  private safestAngle(thetas: number[]): number {
+    let bestTheta = this.arena.openAngle(thetas[0], SHIP.radius + 10);
     let bestD = -1;
-    for (let i = 0; i < 16; i++) {
-      const theta = (i / 16) * TAU;
+    for (const theta of thetas) {
+      if (this.arena.halfGap(theta) < SHIP.radius + 10) continue;
       const p = this.arena.trackPoint(theta);
       let d = Infinity;
       for (const e of this.enemies) d = Math.min(d, dist2(p.x, p.y, e.x, e.y));
@@ -161,7 +230,37 @@ export class Game {
         bestTheta = theta;
       }
     }
-    this.spawnShip(bestTheta);
+    return bestTheta;
+  }
+
+  /**
+   * Hyperspace: to the next chamber clockwise on a chambered level (landing on
+   * its safest stretch), otherwise to a random spot on the track.
+   */
+  private hyperspace(ship: Ship): void {
+    const arena = this.arena;
+    let p: { x: number; y: number };
+    if (arena.isRing) {
+      const theta = arena.openAngle(rand(0, TAU), ship.r + 10);
+      const room = Math.max(0, arena.halfGap(theta) - ship.r - 8);
+      p = arena.trackPoint(theta, rand(-room, room));
+    } else {
+      const here = arena.chamberAtPoint(ship.x, ship.y);
+      const next = (Math.max(here, -1) + 1) % arena.chambers.length;
+      p = arena.trackPoint(this.safestAngle([0.25, 0.5, 0.75].map((f) => arena.chamberAngle(next, f))));
+    }
+    this.jumpShip(ship, p.x, p.y);
+    ship.hyperCooldown = HYPERSPACE.cooldown;
+  }
+
+  private jumpShip(ship: Ship, x: number, y: number): void {
+    explode(this.particles, ship.x, ship.y, HYPER_COLOR, 12, 120);
+    ship.x = x;
+    ship.y = y;
+    ship.vx = 0;
+    ship.vy = 0;
+    ship.invuln = Math.max(ship.invuln, HYPERSPACE.invuln);
+    explode(this.particles, x, y, HYPER_COLOR, 12, 120);
   }
 
   private updateShipAndShots(dt: number, input: Input): void {
@@ -176,6 +275,14 @@ export class Game {
         },
         this.arena,
       );
+      if (input.wasPressed('KeyH') && ship.hyperCooldown <= 0) this.hyperspace(ship);
+      // A corridor pinching shut as the arena morphs into a chambered level
+      // would crush the ship; jump it clear instead.
+      const theta = Math.atan2(ship.y - this.arena.cy, ship.x - this.arena.cx);
+      if (this.arena.moving && this.arena.halfGap(theta) < ship.r + 2) {
+        const p = this.arena.trackPoint(this.arena.openAngle(theta, ship.r + 10));
+        this.jumpShip(ship, p.x, p.y);
+      }
       if (input.isDown('Space') && ship.cooldown <= 0 && this.bullets.length < SHIP.maxBullets) {
         const n = ship.nose();
         this.bullets.push(
@@ -208,7 +315,20 @@ export class Game {
         if (this.enemies.filter(isMine).length < ENEMY.maxMines) this.enemies.push(makeMine(kind, x, y));
       },
     };
+    const dirs = this.enemies.map((e) => e.dir);
     for (const e of [...this.enemies]) updateEnemy(e, dt, world);
+    // Droids in a chamber move as a formation: when one turns back at an end
+    // wall, the rest of its chamber turns with it.
+    if (!this.arena.isRing) {
+      const turned = new Map<number, number>();
+      this.enemies.forEach((e, i) => {
+        if (e.kind === 'droid' && i < dirs.length && e.dir !== dirs[i]) turned.set(this.arena.chamberAt(e.theta), e.dir);
+      });
+      for (const e of this.enemies) {
+        const dir = e.kind === 'droid' ? turned.get(this.arena.chamberAt(e.theta)) : undefined;
+        if (dir !== undefined) e.dir = dir;
+      }
+    }
     for (const b of this.enemyBullets) b.update(dt, this.arena);
     this.enemyBullets = this.enemyBullets.filter((b) => !b.dead);
   }

@@ -16,6 +16,8 @@ export interface Enemy extends Body {
   theta: number;
   /** Resting radial offset from the track centre line. */
   lane: number;
+  /** Direction along the track: 1 = counter-clockwise on screen. Flips at a chamber's end walls. */
+  dir: number;
   phase: number;
   age: number;
   fireTimer: number;
@@ -54,6 +56,7 @@ function baseEnemy(kind: EnemyKind, x: number, y: number): Enemy {
     r: ENEMY.radius[kind],
     theta: 0,
     lane: 0,
+    dir: 1,
     phase: rand(0, TAU),
     age: 0,
     fireTimer: 0,
@@ -92,10 +95,19 @@ export function promote(e: Enemy, scale: number): void {
   e.r = ENEMY.radius[e.kind];
 }
 
-/** Move counter-clockwise (on screen) along the track, staying inside the corridor. */
+/**
+ * Move along the track (counter-clockwise on screen unless turned back),
+ * staying inside the corridor. In a chamber, turn back before the end wall.
+ */
 function followTrack(e: Enemy, dt: number, speed: number, wobble: number, arena: Arena): void {
-  const rt = arena.trackRadius(e.theta);
-  e.theta = normAngle(e.theta - (speed * dt) / Math.max(rt, 50));
+  // Track length per radian here, so the speed is constant along the track
+  // (long flat walls far from the centre would otherwise bunch enemies up).
+  const p0 = arena.trackPoint(e.theta - 0.01);
+  const p1 = arena.trackPoint(e.theta + 0.01);
+  const perRad = Math.max(Math.hypot(p1.x - p0.x, p1.y - p0.y) / 0.02, 50);
+  const ahead = e.theta - e.dir * ((e.r + 14) / perRad);
+  if (arena.halfGap(ahead) < e.r + 4) e.dir = -e.dir;
+  e.theta = normAngle(e.theta - e.dir * ((speed * dt) / perRad));
   e.phase += dt;
   const room = Math.max(0, arena.halfGap(e.theta) - e.r - 8);
   const off = clamp(e.lane + wobble * Math.sin(e.phase * 2.2), -room, room);
@@ -106,8 +118,16 @@ function followTrack(e: Enemy, dt: number, speed: number, wobble: number, arena:
   e.y = p.y;
 }
 
+/** The target, if it's in the same chamber as the enemy (always, on a connected level). */
+function visibleTarget(e: Enemy, w: EnemyWorld): { x: number; y: number } | null {
+  const t = w.target;
+  if (!t || w.arena.isRing) return t;
+  return w.arena.chamberAtPoint(e.x, e.y) === w.arena.chamberAtPoint(t.x, t.y) ? t : null;
+}
+
 export function updateEnemy(e: Enemy, dt: number, w: EnemyWorld): void {
   e.age += dt;
+  const target = visibleTarget(e, w);
   switch (e.kind) {
     case 'droid':
       e.spin += dt * 2;
@@ -119,7 +139,7 @@ export function updateEnemy(e: Enemy, dt: number, w: EnemyWorld): void {
       followTrack(e, dt, ENEMY.commandSpeed * w.scale, 30, w.arena);
       e.fireTimer -= dt;
       if (e.fireTimer <= 0) {
-        if (w.target) w.fire(e.x, e.y, w.target.x, w.target.y);
+        if (target) w.fire(e.x, e.y, target.x, target.y);
         e.fireTimer = (ENEMY.commandFireEvery / w.scale) * rand(0.7, 1.3);
       }
       e.dropTimer -= dt;
@@ -141,9 +161,9 @@ export function updateEnemy(e: Enemy, dt: number, w: EnemyWorld): void {
       }
       let ax = e.jx * 0.9;
       let ay = e.jy * 0.9;
-      if (w.target) {
-        const dx = w.target.x - e.x;
-        const dy = w.target.y - e.y;
+      if (target) {
+        const dx = target.x - e.x;
+        const dy = target.y - e.y;
         const d = Math.hypot(dx, dy) || 1;
         ax += dx / d;
         ay += dy / d;

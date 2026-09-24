@@ -54,7 +54,8 @@ export class ForceField {
     const ra = this.radii[i];
     const rb = this.radii[j];
     const phi = theta - i * DTHETA;
-    return (ra * rb * Math.sin(DTHETA)) / (ra * Math.sin(phi) + rb * Math.sin(DTHETA - phi));
+    const den = ra * Math.sin(phi) + rb * Math.sin(DTHETA - phi);
+    return den > 1e-9 ? (ra * rb * Math.sin(DTHETA)) / den : 0; // 0: field shrunk to a point
   }
 
   minRadius(): number {
