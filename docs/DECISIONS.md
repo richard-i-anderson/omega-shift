@@ -114,6 +114,7 @@ The user saw jittery motion on a display of unknown refresh rate. Measured first
 - **The long simulation tests have a 60 s timeout.** Each takes about 1.5 s on a laptop (the whole suite about 8 s), but they went over Vitest's 5 s default on GitHub's runners, which broke the first deploy.
 - **The whole suite now has a 60 s timeout** (`testTimeout` in `vite.config.ts`), not just the tests marked as long. The bonuses deploy failed because the starfield's alpha test (0.9 s locally) took 5.2 s on the runner, which is about 5.5× slower. Marking long tests one by one kept missing new ones.
 - **Visual checks** have been headless Chrome screenshots (`--headless=new --screenshot`), sometimes via a temporary preview page that renders every level; that page was deleted afterwards. The Claude in Chrome extension was declined, so don't suggest it.
+- **README screenshots** (`docs/screenshots/`) were staged by a temporary page that drives the real `Game` into each scene (scripted flying, a forced kill, a hyperspace or smart bomb at a set moment) and draws it with the same calls as `main.ts`, captured at 1024×768 in headless Chrome over the DevTools protocol. Re-stage them the same way after visual changes.
 
 ## Deployment
 
