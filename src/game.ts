@@ -81,6 +81,22 @@ export class Game {
     };
   }
 
+  /**
+   * Remember every moving thing's current position as its previous one. Called
+   * before each step, so the renderer can draw in between the last two states.
+   */
+  snapshot(): void {
+    this.ship?.snapshot();
+    for (const list of [this.bullets, this.enemyBullets, this.enemies, this.particles]) {
+      for (const o of list) {
+        o.prevX = o.x;
+        o.prevY = o.y;
+      }
+    }
+    this.arena.outer.snapshot();
+    this.arena.inner.snapshot();
+  }
+
   update(dt: number, input: Input): void {
     if (this.debugEnabled) {
       if (input.wasPressed('Backquote')) this.showDebug = !this.showDebug;
@@ -259,6 +275,7 @@ export class Game {
     ship.y = y;
     ship.vx = 0;
     ship.vy = 0;
+    ship.snapshot(); // don't draw it streaking across the arena
     ship.invuln = Math.max(ship.invuln, HYPERSPACE.invuln);
     explode(this.particles, x, y, HYPER_COLOR, 12, 120);
   }

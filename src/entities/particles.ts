@@ -4,6 +4,9 @@ import { rand, TAU } from '../math/vec';
 export interface Particle {
   x: number;
   y: number;
+  /** Position before the latest step, for drawing in between steps. */
+  prevX: number;
+  prevY: number;
   vx: number;
   vy: number;
   angle: number;
@@ -22,6 +25,8 @@ export function explode(out: Particle[], x: number, y: number, color: string, co
     out.push({
       x,
       y,
+      prevX: x,
+      prevY: y,
       vx: Math.cos(a) * s,
       vy: Math.sin(a) * s,
       angle: rand(0, TAU),

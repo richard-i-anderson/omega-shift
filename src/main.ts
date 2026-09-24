@@ -4,11 +4,14 @@ import { Input } from './input';
 import { startLoop } from './loop';
 import { COLORS, drawArena, drawBullets, drawDebug, drawEnemy, drawParticles, drawShip } from './render/draw';
 import { drawHud, drawOverlay } from './render/hud';
+import { PerfOverlay } from './render/perf';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
-const ctx = canvas.getContext('2d')!;
+// Opaque: the compositor needn't blend the canvas with the page behind it.
+const ctx = canvas.getContext('2d', { alpha: false })!;
 const input = new Input(window);
 const game = new Game(new URLSearchParams(location.search).has('debug'));
+const perf = new PerfOverlay();
 
 // Letterbox the fixed logical world into the window, at device resolution.
 let scale = 1;
@@ -24,7 +27,8 @@ function resize(): void {
 window.addEventListener('resize', resize);
 resize();
 
-function render(): void {
+/** `alpha`: how far between the previous and the current simulation state to draw, in [0, 1). */
+function render(alpha: number): void {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -32,28 +36,32 @@ function render(): void {
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
 
-  drawArena(ctx, game.arena);
-  for (const e of game.enemies) drawEnemy(ctx, e, ENEMY_COLORS[e.kind], game.time);
-  drawBullets(ctx, game.enemyBullets, COLORS.enemyBullet);
-  drawBullets(ctx, game.bullets, COLORS.bullet);
-  if (game.ship) drawShip(ctx, game.ship, game.time);
-  drawParticles(ctx, game.particles);
+  drawArena(ctx, game.arena, alpha);
+  for (const e of game.enemies) drawEnemy(ctx, e, ENEMY_COLORS[e.kind], game.time, alpha);
+  drawBullets(ctx, game.enemyBullets, COLORS.enemyBullet, alpha);
+  drawBullets(ctx, game.bullets, COLORS.bullet, alpha);
+  if (game.ship) drawShip(ctx, game.ship, game.time, alpha);
+  drawParticles(ctx, game.particles, alpha);
   if (game.state !== 'title') drawHud(ctx, game);
   drawOverlay(ctx, game);
   if (game.showDebug) drawDebug(ctx, game.arena);
+  perf.draw(ctx);
 }
 
 let stepped = false;
 startLoop(
   (dt) => {
+    if (game.debugEnabled && input.wasPressed('KeyF')) perf.visible = !perf.visible;
+    game.snapshot();
     game.update(dt, input);
     stepped = true;
   },
-  () => {
+  (alpha) => {
     // Only drop unhandled key presses once the simulation has seen them.
     if (stepped) input.endFrame();
     stepped = false;
-    render();
+    render(alpha);
   },
   PHYSICS_HZ,
+  (stats) => perf.record(stats),
 );

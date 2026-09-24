@@ -9,6 +9,10 @@ export function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
 }
 
+export function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
 export function smoothstep(t: number): number {
   const c = clamp(t, 0, 1);
   return c * c * (3 - 2 * c);
