@@ -180,7 +180,14 @@ export class AudioEngine {
       case 'promoted':
         return this.patch(fx.promoted[e.to]);
       case 'enemyKilled':
-        return this.patch(fx.enemyKilled[e.kind]);
+        // A smart bomb kills everything at once; its own crash stands in for the lot.
+        return e.bombed ? undefined : this.patch(fx.enemyKilled[e.kind]);
+      case 'bonusDropped':
+        return this.patch(fx.bonusDropped);
+      case 'bonusCollected':
+        return this.patch(fx.bonusCollected[e.kind]);
+      case 'smartBomb':
+        return this.patch(fx.smartBomb);
       case 'extraLife':
         return this.patch(fx.extraLife);
       case 'waveStart':

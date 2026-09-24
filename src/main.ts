@@ -6,6 +6,7 @@ import { Input } from './input';
 import { startLoop } from './loop';
 import { COLORS, drawArena, drawBullets, drawDebug, drawEnemy, drawParticles, drawShip } from './render/draw';
 import { drawHud, drawOverlay } from './render/hud';
+import { drawBonuses, drawPopups } from './render/bonus';
 import { Starfield } from './render/stars';
 import { PerfOverlay } from './render/perf';
 
@@ -45,11 +46,13 @@ function render(alpha: number): void {
 
   stars.draw(ctx, alpha);
   drawArena(ctx, game.arena, alpha);
+  drawBonuses(ctx, game.bonuses, game.time, alpha);
   for (const e of game.enemies) drawEnemy(ctx, e, ENEMY_COLORS[e.kind], game.time, alpha);
   drawBullets(ctx, game.enemyBullets, COLORS.enemyBullet, alpha);
   drawBullets(ctx, game.bullets, COLORS.bullet, alpha);
   if (game.ship) drawShip(ctx, game.ship, game.time, alpha);
   drawParticles(ctx, game.particles, alpha);
+  drawPopups(ctx, game.popups, game.time);
   if (game.state !== 'title') drawHud(ctx, game);
   drawOverlay(ctx, game);
   if (game.showDebug) drawDebug(ctx, game.arena);

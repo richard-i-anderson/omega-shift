@@ -21,13 +21,13 @@ describe('explosions', () => {
       expect(b.flash.radius).toBeGreaterThan(a.flash.radius);
       expect(b.shake).toBeGreaterThanOrEqual(a.shake);
     }
-    // Lines are 6–24 px; only the ship and death ships shake the screen.
+    // Lines are 6–24 px; only the ship, death ships and the smart bomb shake the screen.
     for (const p of Object.values(EXPLOSION.presets)) {
       expect(p.len[0]).toBeGreaterThanOrEqual(6);
       expect(p.len[1]).toBeLessThanOrEqual(24);
     }
     const shakers = (Object.keys(EXPLOSION.presets) as BlastKind[]).filter((k) => EXPLOSION.presets[k].shake > 0);
-    expect(shakers.sort()).toEqual(['death', 'ship']);
+    expect(shakers.sort()).toEqual(['bomb', 'death', 'ship']);
   });
 
   it('spawns every part of a blast at rest in place, so interpolation does not streak', () => {

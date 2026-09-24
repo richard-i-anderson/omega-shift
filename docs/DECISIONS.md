@@ -74,6 +74,16 @@ The user saw jittery motion on a display of unknown refresh rate. Measured first
 - **Interpolation:** every particle spawns with prev = current, so nothing streaks from the origin in its first frame.
 - **Screen shake is render-only.** `Game.shake` is an amplitude set by blasts with `shake > 0` (death ship 6 px, ship 10 px, capped at 12), decaying as exp(−7t) in `update`. `Game.shakeOffset` turns it into a wobble from a few sines of `game.time`, returns zero while paused, and `main.ts` applies it as a translate on the whole frame. Nothing in the simulation moves, so collision, tests and replays can't be affected, and the frame is deterministic for a given time. Only the two big deaths shake it, because shaking on every droid would be noise. Set `EXPLOSION.shake.enabled` to false to turn it off.
 
+## Bonuses
+
+- **The brief:** enemy ships leave bonuses behind as they move; they must look obviously worth collecting; the player flies through them. Three kinds: an extra life (lives cap at 6), points, and a smart bomb that kills every enemy on screen when the player presses B.
+- **Dropped by a timer, not on death.** Every 6–11 s of a wave, a random live droid, command ship or death ship drops one where it is, with at most 3 waiting. The more dangerous the ship, the better the odds of a life or a bomb (`BONUS.weights`), so the best bonuses are the riskiest to fetch.
+- **They look like nothing else:** the only round, rainbow-cycling things in the game (enemies are angular and one colour each, and every hue is already taken by some enemy, so no single colour would do). A pulsing ring, a faint ring in the complementary hue, three orbiting sparks, a white glyph (a ship for a life, `$`, `B`), a pop-in with overshoot, a two-tone "bling" when dropped, and blinking for the last 3 of their 12 s. First drawn at radius 13, enemy-sized, then raised to 16 so they stand out.
+- **Caps convert to points:** a life at 6 lives, or a bomb with 3 held, scores `BONUS.points` (5000) instead, so a bonus is never wasted. Score extra lives stop at 6 too.
+- **The smart bomb kills everything, in every chamber, mines included** ("all of the enemies on the screen"), scores them as normal kills, and clears enemy shots. Its kills are flagged `bombed`, so the audio plays one huge crash instead of a pile of explosions; the starfield flares and flashes.
+- **Leftover bonuses survive the wave clear.** They used to be destroyed when a wave cleared, so a smart bomb could cost you the bonuses you were flying at. Now they stay collectable through the level card (they're updated there too, and the morphing walls shove them, but collision keeps them inside the arena) and fizzle when the next wave spawns.
+- **Tests** (`tests/bonus.test.ts`): drops happen, the weights hold, each kind's effect, both caps, the bomb clearing a wave and reaching every Maltese chamber, expiry, bonuses staying inside the spinning VORTEX walls, collection during the level card, and a new game resetting bombs and bonuses.
+
 ## Sound
 
 - **The brief:** 80s-style sound; a sound whenever anything hits a force field; each enemy distinctive, more urgent the more dangerous it is. The user chose both a background pulse set by danger and per-action one-shots, with M toggling mute (remembered).

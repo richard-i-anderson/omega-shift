@@ -183,6 +183,9 @@ export class Starfield {
     else if (e.type === 'shipKilled') {
       this.flare(e.x, e.y, STARS.flareShip);
       this.flashT0 = this.time;
+    } else if (e.type === 'smartBomb') {
+      this.flare(e.x, e.y, STARS.flareShip);
+      this.flashT0 = this.time;
     } else if (e.type === 'hyperspace') {
       this.warps.push({ x: e.toX, y: e.toY, t0: this.time });
       if (this.warps.length > 2) this.warps.shift();

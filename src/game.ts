@@ -1,15 +1,18 @@
 import { Arena } from './arena/arena';
 import { DTHETA } from './arena/field';
 import { Bullet } from './entities/bullet';
+import { isBonusDropper, makeBonus, pickBonusKind, updateBonus, type Bonus, type BonusKind } from './entities/bonus';
 import { isHunter, isMine, makeDroid, makeMine, promote, updateEnemy, type Enemy, type EnemyWorld } from './entities/enemies';
 import { spawnBlast, updateParticles, type Particle } from './entities/particles';
 import { Ship } from './entities/ship';
 import {
+  BONUS,
   ENEMY,
   EXPLOSION,
   HYPERSPACE,
   LEVEL_CLEAR_SEC,
   LEVEL_TRANSITION_SEC,
+  MAX_LIVES,
   SCORE,
   SHIP,
   START_LIVES,
@@ -22,6 +25,14 @@ import { LEVELS, levelFor, validateLevel } from './levels/levels';
 import { dist2, rand, smoothstep, TAU } from './math/vec';
 
 export type GameState = 'title' | 'playing' | 'levelClear' | 'gameOver';
+
+/** Text that floats up from a collected bonus. */
+export interface Popup {
+  text: string;
+  x: number;
+  y: number;
+  age: number;
+}
 
 export const ENEMY_COLORS: Record<Enemy['kind'], string> = {
   droid: '#ff4fd8',
@@ -68,6 +79,10 @@ export class Game {
   enemyBullets: Bullet[] = [];
   enemies: Enemy[] = [];
   particles: Particle[] = [];
+  bonuses: Bonus[] = [];
+  popups: Popup[] = [];
+  /** Smart bombs held; B sets one off. */
+  bombs = 0;
   /** Screen-shake amplitude in px, decaying; render-only (see `shakeOffset`). */
   shake = 0;
   /** What happened since the browser layer last drained this (it plays sounds for them). */
@@ -81,6 +96,7 @@ export class Game {
   waveSize = 0;
   private respawnTimer = 0;
   private promoteTimer = 0;
+  private bonusTimer = 0;
   /** The score readout glides between levels' score positions. */
   private hudFrom: { x: number; y: number } = { x: WORLD.cx, y: WORLD.cy };
   private hudTo: { x: number; y: number } = { x: WORLD.cx, y: WORLD.cy };
@@ -130,7 +146,7 @@ export class Game {
    */
   snapshot(): void {
     this.ship?.snapshot();
-    for (const list of [this.bullets, this.enemyBullets, this.enemies, this.particles]) {
+    for (const list of [this.bullets, this.enemyBullets, this.enemies, this.particles, this.bonuses]) {
       for (const o of list) {
         o.prevX = o.x;
         o.prevY = o.y;
@@ -160,6 +176,8 @@ export class Game {
     this.arena.update(dt);
     this.hudT += dt;
     updateParticles(this.particles, dt);
+    for (const p of this.popups) p.age += dt;
+    this.popups = this.popups.filter((p) => p.age < BONUS.popupLife);
     this.shake = this.shake > 0.05 ? this.shake * Math.exp(-EXPLOSION.shake.decay * dt) : 0;
 
     switch (this.state) {
@@ -171,6 +189,7 @@ export class Game {
         break;
       case 'levelClear':
         this.updateShipAndShots(dt, input);
+        this.updateBonuses(dt, false); // still collectable while the arena changes shape
         if (this.stateTimer <= 0) this.spawnWave();
         break;
       case 'gameOver':
@@ -189,6 +208,8 @@ export class Game {
   private resetRun(): void {
     this.score = 0;
     this.lives = START_LIVES;
+    this.bombs = 0;
+    this.bonuses = [];
     this.nextExtraLife = SCORE.extraLifeEvery;
     this.paused = false;
   }
@@ -241,6 +262,10 @@ export class Game {
       });
     }
     this.promoteTimer = ENEMY.promoteEvery / this.scale;
+    this.bonusTimer = rand(BONUS.dropEvery[0], BONUS.dropEvery[1]);
+    // Bonuses left over from the last wave fizzle out as the new one arrives.
+    for (const b of this.bonuses) this.blast('mine', b.x, b.y, '#ffffff');
+    this.bonuses = [];
     this.state = 'playing';
     this.emit({ type: 'waveStart' });
   }
@@ -413,6 +438,8 @@ export class Game {
   private updatePlay(dt: number, input: Input): void {
     this.updateShipAndShots(dt, input);
     this.updateEnemies(dt);
+    this.updateBonuses(dt);
+    if (input.wasPressed('KeyB') && this.ship && this.bombs > 0) this.smartBomb(this.ship);
 
     // Promote a droid to a command ship every so often.
     this.promoteTimer -= dt;
@@ -458,11 +485,68 @@ export class Game {
     }
   }
 
-  private killEnemy(e: Enemy): void {
+  private killEnemy(e: Enemy, bombed = false): void {
     e.dead = true;
     this.blast(ENEMY_BLAST[e.kind], e.x, e.y, ENEMY_COLORS[e.kind]);
     this.addScore(SCORE[e.kind]);
-    this.emit({ type: 'enemyKilled', kind: e.kind, x: e.x, y: e.y });
+    this.emit({ type: 'enemyKilled', kind: e.kind, x: e.x, y: e.y, bombed });
+  }
+
+  /**
+   * Every so often a random ship leaves a bonus where it is; the player
+   * collects one by flying through it.
+   */
+  private updateBonuses(dt: number, drops = true): void {
+    this.bonusTimer -= dt;
+    if (drops && this.bonusTimer <= 0) {
+      this.bonusTimer = rand(BONUS.dropEvery[0], BONUS.dropEvery[1]);
+      const droppers = this.enemies.filter((e) => !e.dead && isBonusDropper(e.kind));
+      if (droppers.length && this.bonuses.length < BONUS.maxLive) {
+        const e = droppers[Math.floor(Math.random() * droppers.length)];
+        if (isBonusDropper(e.kind)) this.dropBonus(pickBonusKind(e.kind), e.x, e.y);
+      }
+    }
+    for (const b of this.bonuses) updateBonus(b, dt, this.arena);
+    const ship = this.ship;
+    if (ship) {
+      for (const b of this.bonuses) {
+        if (!b.dead && dist2(ship.x, ship.y, b.x, b.y) < (b.r + ship.r) ** 2) this.collect(b);
+      }
+    }
+    this.bonuses = this.bonuses.filter((b) => !b.dead);
+  }
+
+  dropBonus(kind: BonusKind, x: number, y: number): void {
+    this.bonuses.push(makeBonus(kind, x, y));
+    this.emit({ type: 'bonusDropped', kind, x, y });
+  }
+
+  private collect(b: Bonus): void {
+    b.dead = true;
+    let text: string;
+    if (b.kind === 'life' && this.lives < MAX_LIVES) {
+      this.lives++;
+      text = '1UP';
+    } else if (b.kind === 'bomb' && this.bombs < BONUS.maxBombs) {
+      this.bombs++;
+      text = 'SMART BOMB';
+    } else {
+      // Points, or a life or bomb the player has no room for.
+      this.addScore(BONUS.points);
+      text = `+${BONUS.points}`;
+    }
+    this.popups.push({ text, x: b.x, y: b.y, age: 0 });
+    this.blast('hyper', b.x, b.y, '#ffffff');
+    this.emit({ type: 'bonusCollected', kind: b.kind, x: b.x, y: b.y });
+  }
+
+  /** Kill every enemy in the arena (all chambers), mines included, and their shots. */
+  private smartBomb(ship: Ship): void {
+    this.bombs--;
+    this.blast('bomb', ship.x, ship.y, '#ffffff');
+    this.emit({ type: 'smartBomb', x: ship.x, y: ship.y });
+    for (const e of this.enemies) if (!e.dead) this.killEnemy(e, true);
+    this.enemyBullets = [];
   }
 
   /** An explosion of preset `kind` at (x, y), cooling to `color`; big ones shake the screen. */
@@ -475,8 +559,9 @@ export class Game {
   private addScore(points: number): void {
     this.score += points;
     while (this.score >= this.nextExtraLife) {
-      this.lives++;
       this.nextExtraLife += SCORE.extraLifeEvery;
+      if (this.lives >= MAX_LIVES) continue;
+      this.lives++;
       this.emit({ type: 'extraLife' });
     }
   }

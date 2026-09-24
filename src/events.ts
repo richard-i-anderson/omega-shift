@@ -1,4 +1,5 @@
 import type { EnemyKind } from './entities/enemies';
+import type { BonusKind } from './entities/bonus';
 
 /** What hit a force field. */
 export type HitSource = 'ship' | 'shot' | 'enemy' | 'mine';
@@ -22,7 +23,11 @@ export type GameEvent =
   | { type: 'enemyFire'; kind: EnemyKind }
   | { type: 'mineLaid'; kind: 'photon' | 'vapor' }
   | { type: 'promoted'; to: 'command' | 'death' }
-  | { type: 'enemyKilled'; kind: EnemyKind; x: number; y: number }
+  /** `bombed`: killed by a smart bomb, which has its own sound. */
+  | { type: 'enemyKilled'; kind: EnemyKind; x: number; y: number; bombed?: boolean }
+  | { type: 'bonusDropped'; kind: BonusKind; x: number; y: number }
+  | { type: 'bonusCollected'; kind: BonusKind; x: number; y: number }
+  | { type: 'smartBomb'; x: number; y: number }
   | { type: 'extraLife' }
   | { type: 'waveStart' }
   | { type: 'waveCleared' }

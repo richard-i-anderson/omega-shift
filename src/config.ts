@@ -88,6 +88,12 @@ export const EXPLOSION = {
       life: [0.9, 1.8], drag: 2.0, spin: 14, curl: 0,
       ring: { radius: 190, life: 0.6 }, flash: { radius: 80, life: 0.22 }, shake: 10,
     },
+    // Smart bomb: one huge white ring sweeping the arena from the ship.
+    bomb: {
+      shards: 40, sparks: 60, speed: 520, sparkSpeed: 900, len: [10, 24], sparkLen: [10, 18],
+      life: [0.5, 1.1], drag: 2.2, spin: 10, curl: 0,
+      ring: { radius: 700, life: 0.7 }, flash: { radius: 140, life: 0.25 }, shake: 12,
+    },
     // Hyperspace: a cyan swirl. `curl` turns each fragment's velocity
     // (rad/s), so the fragments spiral instead of flying straight.
     hyper: {
@@ -178,6 +184,33 @@ export const STARS = {
 } as const;
 
 export const START_LIVES = 3;
+/** Lives never go above this, from bonuses or from score. */
+export const MAX_LIVES = 6;
+
+// Bonuses: enemy ships leave them behind as they fly (src/entities/bonus.ts).
+// The player collects one by flying through it.
+export const BONUS = {
+  radius: 16,
+  // Seconds a bonus lasts; it blinks for the last `blinkLast`.
+  life: 12,
+  blinkLast: 3,
+  // Seconds between drops during a wave (a random ship drops each time).
+  dropEvery: [6, 11],
+  // Never more than this many waiting to be collected.
+  maxLive: 3,
+  points: 5000,
+  // Smart bombs held at most; B sets one off.
+  maxBombs: 3,
+  // What each kind of ship tends to leave: the more dangerous the ship, the
+  // better the bonus, so the best ones are the riskiest to fetch.
+  weights: {
+    droid: { points: 0.7, bomb: 0.2, life: 0.1 },
+    command: { points: 0.45, bomb: 0.35, life: 0.2 },
+    death: { points: 0.3, bomb: 0.4, life: 0.3 },
+  },
+  // Collected-bonus text floats up and fades over this many seconds.
+  popupLife: 1.4,
+} as const;
 
 export const ARENA = {
   // Minimum radial distance between the inner and outer force fields.
@@ -353,6 +386,36 @@ export const SOUND = {
         { wave: 'noise', decay: 0.12, gain: 0.15, filter: { type: 'highpass', freq: 2000 } },
       ],
     },
+    // A bright two-tone "bling" so the player notices a bonus has appeared.
+    bonusDropped: [
+      { wave: 'square', freq: 1760, decay: 0.06, gain: 0.14 },
+      { wave: 'triangle', freq: 2637, delay: 0.06, decay: 0.2, gain: 0.16 },
+    ],
+    bonusCollected: {
+      // Rising arpeggio, C6 E6 G6 C7 (the same fanfare as a score extra life).
+      life: [
+        { wave: 'square', freq: 1047, decay: 0.09, gain: 0.18 },
+        { wave: 'square', freq: 1319, delay: 0.07, decay: 0.09, gain: 0.18 },
+        { wave: 'square', freq: 1568, delay: 0.14, decay: 0.09, gain: 0.18 },
+        { wave: 'square', freq: 2093, delay: 0.21, decay: 0.35, gain: 0.18 },
+      ],
+      // A quick coin chirp.
+      points: [
+        { wave: 'square', freq: 988, decay: 0.05, gain: 0.18 },
+        { wave: 'square', freq: 1319, delay: 0.05, decay: 0.25, gain: 0.18 },
+      ],
+      // A power-up sweep.
+      bomb: [
+        { wave: 'sawtooth', freq: 220, freqEnd: 1760, attack: 0.01, decay: 0.35, gain: 0.2, filter: { type: 'lowpass', freq: 5000 } },
+        { wave: 'square', freq: 880, delay: 0.3, decay: 0.2, gain: 0.14 },
+      ],
+    },
+    // The biggest sound in the game: a long crash, a plunging saw and a sub thump.
+    smartBomb: [
+      { wave: 'noise', decay: 2.4, gain: 0.8, filter: { type: 'lowpass', freq: 9000, freqEnd: 90, q: 1 } },
+      { wave: 'sawtooth', freq: 900, freqEnd: 30, decay: 1.8, gain: 0.35 },
+      { wave: 'square', freq: 70, freqEnd: 28, decay: 1.2, gain: 0.4 },
+    ],
     // Rising arpeggio, C6 E6 G6 C7.
     extraLife: [
       { wave: 'square', freq: 1047, decay: 0.09, gain: 0.15 },

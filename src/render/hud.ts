@@ -43,7 +43,18 @@ export function drawHud(ctx: CanvasRenderingContext2D, g: Game): void {
   for (let i = 0; i < shown; i++) {
     drawShipIcon(ctx, cx + (i - (shown - 1) / 2) * 18, cy + 30, -Math.PI / 2, SHIP.radius * 0.6);
   }
+  // Smart bombs held, as small rings marked B (the key that fires one).
+  for (let i = 0; i < g.bombs; i++) {
+    const x = cx + (i - (g.bombs - 1) / 2) * 18;
+    ctx.strokeStyle = BOMB_COLOR;
+    ctx.beginPath();
+    ctx.arc(x, cy + 47, 6, 0, Math.PI * 2);
+    ctx.stroke();
+    text(ctx, 'B', x, cy + 47.5, 9, BOMB_COLOR);
+  }
 }
+
+const BOMB_COLOR = '#ffb070';
 
 /** Big messages for the title, level cards, pause and game over. */
 export function drawOverlay(ctx: CanvasRenderingContext2D, g: Game): void {
@@ -55,7 +66,7 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, g: Game): void {
   if (g.state === 'title') {
     text(ctx, 'OMEGA SHIFT', cx, top, 56, COLORS.field);
     if (blink) text(ctx, 'PRESS ENTER', cx, bottom - 20, 22, COLORS.text);
-    text(ctx, '← → ROTATE   ↑ THRUST   SPACE FIRE   H HYPERSPACE   P PAUSE   M SOUND', cx, bottom + 16, 14, COLORS.dimText, 'normal');
+    text(ctx, '← → ROTATE   ↑ THRUST   SPACE FIRE   H HYPERSPACE   B BOMB   P PAUSE   M SOUND', cx, bottom + 16, 14, COLORS.dimText, 'normal');
     return;
   }
   if (g.state === 'levelClear') {
