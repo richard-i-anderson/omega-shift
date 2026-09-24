@@ -75,6 +75,8 @@ export class Game {
   stateTimer = 0;
   /** True on the card shown after clearing a wave (vs. the start of a game). */
   justCleared = false;
+  /** Ships in the current wave when it spawned (the sound speeds up as they fall). */
+  waveSize = 0;
   private respawnTimer = 0;
   private promoteTimer = 0;
   /** The score readout glides between levels' score positions. */
@@ -214,6 +216,7 @@ export class Game {
   private spawnWave(): void {
     const { def, cycle } = levelFor(this.levelIndex);
     const count = def.droids + 2 * cycle;
+    this.waveSize = count;
     const arena = this.arena;
     if (!this.ship) this.spawnShip(arena.openAngle(SHIP_SPAWN_THETA, SHIP.radius + 10));
     this.enemies = [];

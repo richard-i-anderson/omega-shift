@@ -78,6 +78,7 @@ describe('game loop (headless)', () => {
     expect(rectCorner).toBeCloseTo(490);
     expect(game.arena.outer.radii[0]).toBeCloseTo(365);
     expect(game.enemies.filter((e) => e.kind === 'droid').length).toBe(6);
+    expect(game.waveSize).toBe(6);
   });
 
   /** A debug-enabled game started straight on `name`, with the wave spawned. */

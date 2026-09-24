@@ -119,14 +119,14 @@ describe('danger level', () => {
 
   it('is silent outside a live wave', () => {
     const enemies = es('death');
-    const at = (state: Game['state'], paused = false) => ambientDanger({ state, paused, enemies, levelIndex: 0 });
+    const at = (state: Game['state'], paused = false) => ambientDanger({ state, paused, enemies, waveSize: 5 });
     expect(at('playing').danger).toBe('death');
     expect(at('playing', true).danger).toBe('none');
     for (const state of ['title', 'levelClear', 'gameOver'] as const) expect(at(state).danger).toBe('none');
   });
 
   it('drones during the wave and the level cards, and goes quiet on pause, title and game over', () => {
-    const at = (state: Game['state'], paused = false) => ambientDanger({ state, paused, enemies: [], levelIndex: 0 }).bed;
+    const at = (state: Game['state'], paused = false) => ambientDanger({ state, paused, enemies: [], waveSize: 5 }).bed;
     expect(at('playing')).toBe('play');
     expect(at('levelClear')).toBe('play');
     expect(at('playing', true)).toBe('off');
@@ -136,11 +136,10 @@ describe('danger level', () => {
 
   it('counts the fraction of the wave still alive, ignoring mines and the dead', () => {
     const n = LEVELS[0].droids;
-    expect(remainingFraction(es(...Array<EnemyKind>(n).fill('droid')), 0)).toBe(1);
-    expect(remainingFraction([...es('droid', 'command', 'photon', 'vapor'), { kind: 'death', dead: true }], 0)).toBeCloseTo(2 / n);
-    expect(remainingFraction([], 0)).toBe(0);
-    // Later cycles have bigger waves (def.droids + 2 per cycle).
-    expect(remainingFraction(es('droid'), LEVELS.length)).toBeCloseTo(1 / (n + 2));
+    expect(remainingFraction(es(...Array<EnemyKind>(n).fill('droid')), n)).toBe(1);
+    expect(remainingFraction([...es('droid', 'command', 'photon', 'vapor'), { kind: 'death', dead: true }], n)).toBeCloseTo(2 / n);
+    expect(remainingFraction([], n)).toBe(0);
+    expect(remainingFraction(es('droid'), 0)).toBe(0);
   });
 });
 

@@ -1,6 +1,5 @@
 import type { Enemy } from '../entities/enemies';
 import type { GameState } from '../game';
-import { levelFor } from '../levels/levels';
 
 /** How threatening the arena is right now; sets the background pulse. */
 export type Danger = 'none' | 'droid' | 'command' | 'death';
@@ -29,13 +28,8 @@ export function dangerLevel(enemies: readonly Pick<Enemy, 'kind' | 'dead'>[]): D
   return DANGER_ORDER[rank];
 }
 
-/**
- * Live droids, command and death ships as a fraction of the wave's size. The
- * wave size mirrors `Game.spawnWave` (`def.droids + 2 * cycle`).
- */
-export function remainingFraction(enemies: readonly Pick<Enemy, 'kind' | 'dead'>[], levelIndex: number): number {
-  const { def, cycle } = levelFor(levelIndex);
-  const wave = def.droids + 2 * cycle;
+/** Live droids, command and death ships as a fraction of the wave's size (`Game.waveSize`). */
+export function remainingFraction(enemies: readonly Pick<Enemy, 'kind' | 'dead'>[], wave: number): number {
   let alive = 0;
   for (const e of enemies) if (!e.dead && DANGER_ORDER.includes(e.kind as Danger)) alive++;
   return wave > 0 ? Math.min(1, alive / wave) : 0;
@@ -44,7 +38,8 @@ export function remainingFraction(enemies: readonly Pick<Enemy, 'kind' | 'dead'>
 interface AmbientSource {
   state: GameState;
   paused: boolean;
-  levelIndex: number;
+  /** Ships in the current wave when it spawned. */
+  waveSize: number;
   enemies: readonly Pick<Enemy, 'kind' | 'dead'>[];
 }
 
@@ -58,7 +53,7 @@ export function ambientDanger(g: AmbientSource): Ambient {
   const bed: Bed = g.paused ? 'off' : g.state === 'title' ? 'title' : g.state === 'gameOver' ? 'off' : 'play';
   return {
     danger: live ? dangerLevel(g.enemies) : 'none',
-    remaining: live ? remainingFraction(g.enemies, g.levelIndex) : 1,
+    remaining: live ? remainingFraction(g.enemies, g.waveSize) : 1,
     bed,
   };
 }
