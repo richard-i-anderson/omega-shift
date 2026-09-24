@@ -54,6 +54,28 @@ export const HYPERSPACE = {
   invuln: 0.75,
 } as const;
 
+// Background starfield: dim, seeded, drawn under everything.
+export const STARS = {
+  count: 160,
+  seed: 1981,
+  // Base alpha range; kept low so walls and enemies stay readable.
+  minAlpha: 0.25,
+  maxAlpha: 0.55,
+  // Share of stars that are 2 px instead of 1 px.
+  bigShare: 0.2,
+  // Share of stars tinted faint blue or amber (split evenly).
+  tintShare: 0.15,
+  // Gentle flicker: alpha = base × (1 − depth + depth·sin(rate·t + phase)).
+  flickerDepth: 0.25,
+  // Flicker angular speed range, radians per second.
+  minRate: 0.6,
+  maxRate: 2.2,
+  // Occasional slow twinkle: extra brightness, at most this much, for the
+  // top slice of a slow sine (a few seconds bright every half minute or so).
+  twinkleBoost: 0.35,
+  twinkleRate: 0.22,
+} as const;
+
 export const START_LIVES = 3;
 
 export const ARENA = {

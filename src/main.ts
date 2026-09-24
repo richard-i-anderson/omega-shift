@@ -4,11 +4,13 @@ import { Input } from './input';
 import { startLoop } from './loop';
 import { COLORS, drawArena, drawBullets, drawDebug, drawEnemy, drawParticles, drawShip } from './render/draw';
 import { drawHud, drawOverlay } from './render/hud';
+import { drawStars, makeStarfield } from './render/stars';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 const input = new Input(window);
 const game = new Game(new URLSearchParams(location.search).has('debug'));
+const stars = makeStarfield();
 
 // Letterbox the fixed logical world into the window, at device resolution.
 let scale = 1;
@@ -32,6 +34,7 @@ function render(): void {
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
 
+  drawStars(ctx, stars, game.time);
   drawArena(ctx, game.arena);
   for (const e of game.enemies) drawEnemy(ctx, e, ENEMY_COLORS[e.kind], game.time);
   drawBullets(ctx, game.enemyBullets, COLORS.enemyBullet);

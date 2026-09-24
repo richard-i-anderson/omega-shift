@@ -8,6 +8,7 @@ Why things are the way they are. `CLAUDE.md` covers commands and architecture; t
 - **Name: "Omega Shift", not "Omega Race".** Omega Race is an existing arcade title, so the game, the repo (`omega-shift`) and the public URL use a distinct name. The local folder is still called `OmegaRace`, which is fine.
 - **Gameplay follows the original:** rotate/thrust/fire ship with momentum; droids circle the arena and are promoted to command ships (shoot, lay photon mines), which become death ships (chase, lay vapor mines). Walls bounce the ship, and the side you hit flashes.
 - **v1 scope:** the core game plus five shape levels (four more were added later: BAR, PILLAR, STAR, MALTESE; see below). Deliberately deferred: sound, a high-score table, an attract mode, and touch controls (the game is keyboard-only, so it doesn't work on phones).
+- **Starfield background** (`src/render/stars.ts`, tuning in `STARS` in `src/config.ts`): about 160 dim stars (base alpha 0.25–0.55, 1–2 px, a few faintly blue or amber) drawn under everything, including the corridor, so walls and enemies stay readable. Generated once from a seed, so the sky is the same every run. Drawn with `fillRect` only, no `shadowBlur`, batched into a few colour × alpha buckets, so it costs next to nothing. The flicker is gentle (never below half the base alpha) with an occasional slow twinkle, and runs on `game.time`, so it freezes while paused; switch to wall-clock time if that ever looks wrong.
 
 ## Technology
 
