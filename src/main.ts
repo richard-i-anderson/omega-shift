@@ -6,7 +6,7 @@ import { Input } from './input';
 import { startLoop } from './loop';
 import { COLORS, drawArena, drawBullets, drawDebug, drawEnemy, drawParticles, drawShip } from './render/draw';
 import { drawHud, drawOverlay } from './render/hud';
-import { drawStars, makeStarfield } from './render/stars';
+import { Starfield } from './render/stars';
 import { PerfOverlay } from './render/perf';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
@@ -14,7 +14,7 @@ const canvas = document.getElementById('game') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d', { alpha: false })!;
 const input = new Input(window);
 const game = new Game(new URLSearchParams(location.search).has('debug'));
-const stars = makeStarfield();
+const stars = new Starfield();
 const perf = new PerfOverlay();
 const audio = new AudioEngine();
 audio.attach(window);
@@ -42,7 +42,7 @@ function render(alpha: number): void {
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
 
-  drawStars(ctx, stars, game.time);
+  stars.draw(ctx, alpha);
   drawArena(ctx, game.arena, alpha);
   for (const e of game.enemies) drawEnemy(ctx, e, ENEMY_COLORS[e.kind], game.time, alpha);
   drawBullets(ctx, game.enemyBullets, COLORS.enemyBullet, alpha);
@@ -55,9 +55,12 @@ function render(alpha: number): void {
   perf.draw(ctx);
 }
 
-/** Play what happened since the last frame; set the background pulse and thrust rumble. */
-function updateSound(): void {
-  for (const e of game.events) audio.play(e);
+/** Hand what happened since the last frame to sound and the starfield; set the background pulse and thrust rumble. */
+function drainEvents(): void {
+  for (const e of game.events) {
+    audio.play(e);
+    stars.onEvent(e);
+  }
   game.events.length = 0;
   const flying = !game.paused && (game.state === 'playing' || game.state === 'levelClear');
   audio.updateAmbient(ambientDanger(game), flying && !!game.ship?.thrusting);
@@ -70,10 +73,11 @@ startLoop(
     if (game.debugEnabled && input.wasPressed('KeyF')) perf.visible = !perf.visible;
     game.snapshot();
     game.update(dt, input);
+    if (!game.paused) stars.update(dt);
     stepped = true;
   },
   (alpha) => {
-    updateSound();
+    drainEvents();
     // Only drop unhandled key presses once the simulation has seen them.
     if (stepped) input.endFrame();
     stepped = false;

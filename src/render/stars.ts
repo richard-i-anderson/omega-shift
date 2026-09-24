@@ -1,4 +1,5 @@
 import { STARS, WORLD } from '../config';
+import type { GameEvent } from '../events';
 
 // A dim, gently flickering background starfield. Generated once from a seed,
 // drawn with plain fillRect (no shadowBlur) so it costs next to nothing.
@@ -80,4 +81,29 @@ export function drawStars(ctx: CanvasRenderingContext2D, stars: Star[], time: nu
     }
   }
   ctx.globalAlpha = 1;
+}
+
+/**
+ * The background sky. `main.ts` feeds it every game event (explosions, hyperspace,
+ * ship deaths carry positions), steps it with the simulation (not while paused),
+ * and draws it first each frame.
+ */
+export class Starfield {
+  private readonly stars: Star[];
+  private time = 0;
+
+  constructor(seed: number = STARS.seed) {
+    this.stars = makeStarfield(seed);
+  }
+
+  onEvent(_e: GameEvent): void {}
+
+  update(dt: number): void {
+    this.time += dt;
+  }
+
+  /** `alpha` is the interpolation fraction between simulation steps. */
+  draw(ctx: CanvasRenderingContext2D, _alpha = 1): void {
+    drawStars(ctx, this.stars, this.time);
+  }
 }

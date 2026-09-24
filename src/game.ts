@@ -275,9 +275,11 @@ export class Game {
       const next = (Math.max(here, -1) + 1) % arena.chambers.length;
       p = arena.trackPoint(this.safestAngle([0.25, 0.5, 0.75].map((f) => arena.chamberAngle(next, f))));
     }
+    const fromX = ship.x;
+    const fromY = ship.y;
     this.jumpShip(ship, p.x, p.y);
     ship.hyperCooldown = HYPERSPACE.cooldown;
-    this.emit({ type: 'hyperspace' });
+    this.emit({ type: 'hyperspace', fromX, fromY, toX: p.x, toY: p.y });
   }
 
   private jumpShip(ship: Ship, x: number, y: number): void {
@@ -418,7 +420,7 @@ export class Game {
     e.dead = true;
     explode(this.particles, e.x, e.y, ENEMY_COLORS[e.kind], isMine(e) ? 8 : 16);
     this.addScore(SCORE[e.kind]);
-    this.emit({ type: 'enemyKilled', kind: e.kind });
+    this.emit({ type: 'enemyKilled', kind: e.kind, x: e.x, y: e.y });
   }
 
   private addScore(points: number): void {
@@ -436,7 +438,7 @@ export class Game {
     this.ship = null;
     this.bullets = [];
     this.lives--;
-    this.emit({ type: 'shipKilled' });
+    this.emit({ type: 'shipKilled', x: ship.x, y: ship.y });
     if (this.lives <= 0) {
       this.state = 'gameOver';
       this.stateTimer = 1.5;

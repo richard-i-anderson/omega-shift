@@ -17,12 +17,12 @@ export interface ArenaHit {
 export type GameEvent =
   | ({ type: 'fieldHit' } & ArenaHit)
   | { type: 'shipFire' }
-  | { type: 'shipKilled' }
-  | { type: 'hyperspace' }
+  | { type: 'shipKilled'; x: number; y: number }
+  | { type: 'hyperspace'; fromX: number; fromY: number; toX: number; toY: number }
   | { type: 'enemyFire'; kind: EnemyKind }
   | { type: 'mineLaid'; kind: 'photon' | 'vapor' }
   | { type: 'promoted'; to: 'command' | 'death' }
-  | { type: 'enemyKilled'; kind: EnemyKind }
+  | { type: 'enemyKilled'; kind: EnemyKind; x: number; y: number }
   | { type: 'extraLife' }
   | { type: 'waveStart' }
   | { type: 'waveCleared' }
