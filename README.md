@@ -82,11 +82,3 @@ It's TypeScript and HTML canvas, bundled with Vite, with no game engine and no r
 ## How it works
 
 Every force field is a star-shaped curve stored as 720 distances from the arena centre. That one choice makes morphing between any two shapes a simple blend, gives the enemies an orbit track on every level (halfway between the two fields), and lets validation prove that no level ever pinches the corridor too narrow. [`CLAUDE.md`](CLAUDE.md) describes the architecture, and [`docs/DECISIONS.md`](docs/DECISIONS.md) records why things are the way they are, including the bugs and dead ends along the way.
-
-## Credits
-
-**Every single line of code in this repository was written by [Claude Code](https://claude.com/claude-code), Anthropic's AI coding agent, running Claude Opus 5.5.** That includes the game, the physics, the synthesised sound, the tests, the build and deploy workflow, and this README.
-
-No human wrote any of the code. The game was designed and directed by [@richard-i-anderson](https://github.com/richard-i-anderson) in conversation with Claude Code. They described what they wanted, answered its questions and made the calls. Claude Code planned the work and wrote and tested every change. It also ran parallel sub-agents in separate git worktrees, and checked its own results with headless-Chrome screenshots and offline audio renders. The screenshots above were staged and captured by Claude Code too.
-
-With thanks to Ron Haliburton and Midway for *Omega Race*, the game that started it all.
