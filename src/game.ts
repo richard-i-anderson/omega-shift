@@ -33,7 +33,7 @@ import {
 } from './config';
 import { MAX_PENDING_EVENTS, type GameEvent } from './events';
 import type { Input } from './input';
-import { LEVELS, levelFor, validateLevel } from './levels/levels';
+import { LEVELS, levelFor, tankersFor, validateLevel } from './levels/levels';
 import { dist2, rand, smoothstep, TAU } from './math/vec';
 
 export type GameState = 'title' | 'playing' | 'levelClear' | 'gameOver';
@@ -58,11 +58,8 @@ export const ENEMY_COLORS: Record<Enemy['kind'], string> = {
 /** Where the player (re)spawns and where droids start: opposite sides of the track. */
 const SHIP_SPAWN_THETA = Math.PI;
 const DROID_SPAWN_THETA = 0;
-/**
- * Where tankers start on a connected level: a quarter turn from both the ship
- * and the droids, then between them.
- */
-const TANKER_SPAWN_THETAS = [Math.PI / 2, (3 * Math.PI) / 2, (7 * Math.PI) / 4];
+/** Where tankers start on a connected level: a quarter turn from both the ship and the droids. */
+const TANKER_SPAWN_THETAS = [Math.PI / 2, (3 * Math.PI) / 2];
 /** Pixels between droids along the track when a wave spawns. */
 const DROID_SPACING = 50;
 /** Debug keys that jump to levels 1–9, 10 (`0`) and 11 (`-`). */
@@ -266,7 +263,7 @@ export class Game {
   private spawnWave(): void {
     const { def, cycle } = levelFor(this.levelIndex);
     const count = def.droids + 2 * cycle;
-    const tankers = Math.min(def.tankers + cycle, TANKER_SPAWN_THETAS.length);
+    const tankers = tankersFor(this.levelIndex);
     this.waveSize = count + tankers;
     const arena = this.arena;
     if (!this.ship) this.spawnShip(arena.openAngle(SHIP_SPAWN_THETA, SHIP.radius + 10));

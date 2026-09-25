@@ -5,7 +5,7 @@ import { Bullet } from '../src/entities/bullet';
 import { isHunter, isShip, pickSpawnKind, type Enemy } from '../src/entities/enemies';
 import { Game, LEVEL_KEYS } from '../src/game';
 import type { Input } from '../src/input';
-import { LEVELS } from '../src/levels/levels';
+import { LEVELS, tankersFor } from '../src/levels/levels';
 
 class FakeInput {
   down = new Set<string>();
@@ -46,9 +46,17 @@ function shoot(game: Game, tick: (s: number) => void, e: Enemy) {
 }
 
 describe('tankers', () => {
-  it('first appear on level 5', () => {
-    for (const def of LEVELS.slice(0, 4)) expect(def.tankers).toBe(0);
-    for (const def of LEVELS.slice(4)) expect(def.tankers).toBeGreaterThanOrEqual(1);
+  it('none in rounds 1-4, one in rounds 5-8, two in every round after', () => {
+    const rounds = Array.from({ length: 30 }, (_, i) => tankersFor(i));
+    expect(rounds.slice(0, 4)).toEqual([0, 0, 0, 0]);
+    expect(rounds.slice(4, 8)).toEqual([1, 1, 1, 1]);
+    expect(rounds.slice(8).every((n) => n === 2)).toBe(true);
+  });
+
+  it('a wave spawns with that many', () => {
+    for (const [name, want] of [['DIAMOND', 0], ['SPIN', 1], ['STAR', 1], ['MALTESE', 2], ['SHIFT', 2]] as const) {
+      expect(tankers(startOn(name).game), name).toHaveLength(want);
+    }
   });
 
   it('take many hits, flash and clank on each, then blow up, score and leave a bonus', () => {

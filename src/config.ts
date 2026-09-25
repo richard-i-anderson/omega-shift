@@ -38,6 +38,9 @@ export const ENEMY = {
   // Tankers: slow, armoured, and they keep launching ships until destroyed,
   // so a wave can't be cleared in seconds by picking off the droids.
   tankerSpeed: 32,
+  // Rounds 1–4 have no tankers, rounds 5–8 one, and every round after that two
+  // (see `tankersFor`): the round numbers, counting from 0, where each step starts.
+  tankerRounds: [4, 8],
   // Hits to destroy one at speed scale 1 (scaled with the level's speed).
   tankerHp: 12,
   // Seconds between launches, before dividing by the speed scale.
@@ -81,34 +84,34 @@ export const EXPLOSION = {
     // High launch speed with heavy drag: a violent burst that then hangs.
     // A fragment travels at most speed / drag px.
     mine: {
-      shards: 12, sparks: 12, speed: 240, sparkSpeed: 460, len: [6, 12], sparkLen: [6, 10],
-      life: [0.35, 0.75], drag: 3.2, spin: 12, curl: 0,
-      ring: { radius: 44, life: 0.28 }, flash: { radius: 22, life: 0.1 }, shake: 0,
+      shards: 22, sparks: 22, speed: 310, sparkSpeed: 580, len: [8, 16], sparkLen: [8, 13],
+      life: [0.44, 0.94], drag: 2.56, spin: 12, curl: 0,
+      ring: { radius: 59, life: 0.28 }, flash: { radius: 28, life: 0.1 }, shake: 0,
     },
     droid: {
-      shards: 26, sparks: 20, speed: 300, sparkSpeed: 580, len: [7, 16], sparkLen: [7, 12],
-      life: [0.5, 1.05], drag: 2.8, spin: 12, curl: 0,
-      ring: { radius: 78, life: 0.35 }, flash: { radius: 36, life: 0.12 }, shake: 0,
+      shards: 47, sparks: 36, speed: 390, sparkSpeed: 720, len: [9, 21], sparkLen: [9, 16],
+      life: [0.62, 1.31], drag: 2.24, spin: 12, curl: 0,
+      ring: { radius: 105, life: 0.35 }, flash: { radius: 45, life: 0.12 }, shake: 0,
     },
     command: {
-      shards: 36, sparks: 28, speed: 340, sparkSpeed: 650, len: [8, 19], sparkLen: [8, 14],
-      life: [0.6, 1.25], drag: 2.5, spin: 13, curl: 0,
-      ring: { radius: 105, life: 0.42 }, flash: { radius: 46, life: 0.14 }, shake: 0,
+      shards: 65, sparks: 50, speed: 440, sparkSpeed: 810, len: [10, 25], sparkLen: [10, 18],
+      life: [0.75, 1.56], drag: 2, spin: 13, curl: 0,
+      ring: { radius: 142, life: 0.42 }, flash: { radius: 58, life: 0.14 }, shake: 0,
     },
     death: {
-      shards: 54, sparks: 40, speed: 400, sparkSpeed: 740, len: [9, 22], sparkLen: [9, 16],
-      life: [0.7, 1.45], drag: 2.3, spin: 14, curl: 0,
-      ring: { radius: 145, life: 0.5 }, flash: { radius: 62, life: 0.17 }, shake: 6,
+      shards: 97, sparks: 72, speed: 520, sparkSpeed: 920, len: [12, 29], sparkLen: [12, 21],
+      life: [0.88, 1.81], drag: 1.84, spin: 14, curl: 0,
+      ring: { radius: 196, life: 0.5 }, flash: { radius: 78, life: 0.17 }, shake: 6,
     },
     tanker: {
-      shards: 64, sparks: 48, speed: 420, sparkSpeed: 780, len: [10, 23], sparkLen: [9, 17],
-      life: [0.8, 1.6], drag: 2.1, spin: 14, curl: 0,
-      ring: { radius: 170, life: 0.55 }, flash: { radius: 72, life: 0.2 }, shake: 8,
+      shards: 115, sparks: 86, speed: 550, sparkSpeed: 980, len: [13, 30], sparkLen: [12, 22],
+      life: [1, 2], drag: 1.68, spin: 14, curl: 0,
+      ring: { radius: 230, life: 0.55 }, flash: { radius: 90, life: 0.2 }, shake: 8,
     },
     ship: {
-      shards: 72, sparks: 56, speed: 440, sparkSpeed: 820, len: [10, 24], sparkLen: [10, 18],
-      life: [0.9, 1.8], drag: 2.0, spin: 14, curl: 0,
-      ring: { radius: 190, life: 0.6 }, flash: { radius: 80, life: 0.22 }, shake: 10,
+      shards: 130, sparks: 101, speed: 570, sparkSpeed: 1020, len: [13, 31], sparkLen: [13, 23],
+      life: [1.12, 2.25], drag: 1.6, spin: 14, curl: 0,
+      ring: { radius: 256, life: 0.6 }, flash: { radius: 100, life: 0.22 }, shake: 10,
     },
     // Smart bomb: one huge white ring sweeping the arena from the ship.
     bomb: {
