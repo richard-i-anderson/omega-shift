@@ -1,4 +1,4 @@
-import type { Enemy } from '../entities/enemies';
+import { isShip, type Enemy } from '../entities/enemies';
 import type { GameState } from '../game';
 
 /** How threatening the arena is right now; sets the background pulse. */
@@ -17,28 +17,42 @@ export interface Ambient {
   bed: Bed;
 }
 
-/** The most dangerous enemy alive. Mines don't count: they don't move. */
+/**
+ * The danger each enemy kind raises the pulse to. Mines don't count: they
+ * don't move. A tanker doesn't shoot or chase, but it launches hunters, so it
+ * counts as a command ship.
+ */
+const KIND_DANGER: Record<Enemy['kind'], Danger> = {
+  droid: 'droid',
+  command: 'command',
+  death: 'death',
+  tanker: 'command',
+  photon: 'none',
+  vapor: 'none',
+};
+
+/** The most dangerous enemy alive. */
 export function dangerLevel(enemies: readonly Pick<Enemy, 'kind' | 'dead'>[]): Danger {
   let rank = 0;
   for (const e of enemies) {
     if (e.dead) continue;
-    const r = DANGER_ORDER.indexOf(e.kind as Danger);
+    const r = DANGER_ORDER.indexOf(KIND_DANGER[e.kind]);
     if (r > rank) rank = r;
   }
   return DANGER_ORDER[rank];
 }
 
-/** Live droids, command and death ships as a fraction of the wave's size (`Game.waveSize`). */
+/** Live ships (not mines) as a fraction of the wave's size (`Game.waveSize`). */
 export function remainingFraction(enemies: readonly Pick<Enemy, 'kind' | 'dead'>[], wave: number): number {
   let alive = 0;
-  for (const e of enemies) if (!e.dead && DANGER_ORDER.includes(e.kind as Danger)) alive++;
+  for (const e of enemies) if (!e.dead && isShip(e)) alive++;
   return wave > 0 ? Math.min(1, alive / wave) : 0;
 }
 
 interface AmbientSource {
   state: GameState;
   paused: boolean;
-  /** Ships in the current wave when it spawned. */
+  /** Ships in the current wave: those it spawned with, plus any tankers have launched. */
   waveSize: number;
   enemies: readonly Pick<Enemy, 'kind' | 'dead'>[];
 }

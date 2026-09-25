@@ -125,7 +125,8 @@ describe('bonuses', () => {
     collectOnShip(game, tick, 'bomb');
     input.presses.add('KeyB');
     tick(1 / 120);
-    expect(game.enemies).toHaveLength(0);
+    // Only the tankers survive a bomb.
+    expect(game.enemies.every((e) => e.kind === 'tanker')).toBe(true);
   });
 
   it('bombs held stop at the maximum; extras score points', () => {

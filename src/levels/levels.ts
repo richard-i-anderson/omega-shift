@@ -8,6 +8,8 @@ export interface LevelDef {
   /** Loop the keyframes forever (morphing levels). */
   loop: boolean;
   droids: number;
+  /** Armoured ships that keep launching more until destroyed (one more each time the list repeats). */
+  tankers: number;
   speedScale: number;
   /**
    * Where the score is drawn, when the play area leaves no room for it inside
@@ -48,16 +50,17 @@ const VORTEX_STAR: ShapeSpec = { kind: 'star', points: 4, rx: 115, ry: 115, vall
 const still = (outer: ShapeSpec, inner: ShapeSpec): Keyframe[] => [{ outer, inner, holdSec: 0, morphSec: 0 }];
 
 export const LEVELS: LevelDef[] = [
-  { name: 'CLASSIC', keyframes: still(OUTER_RECT, INNER_RECT), loop: false, droids: 5, speedScale: 1 },
-  { name: 'RING', keyframes: still(OUTER_RING, INNER_RING), loop: false, droids: 6, speedScale: 1.05 },
-  { name: 'CROSS', keyframes: still(OUTER_CROSS, INNER_SQUARE), loop: false, droids: 6, speedScale: 1.1 },
-  { name: 'DIAMOND', keyframes: still(OUTER_DIAMOND, INNER_HEX), loop: false, droids: 7, speedScale: 1.15 },
+  { name: 'CLASSIC', keyframes: still(OUTER_RECT, INNER_RECT), loop: false, droids: 5, tankers: 0, speedScale: 1 },
+  { name: 'RING', keyframes: still(OUTER_RING, INNER_RING), loop: false, droids: 6, tankers: 0, speedScale: 1.05 },
+  { name: 'CROSS', keyframes: still(OUTER_CROSS, INNER_SQUARE), loop: false, droids: 6, tankers: 0, speedScale: 1.1 },
+  { name: 'DIAMOND', keyframes: still(OUTER_DIAMOND, INNER_HEX), loop: false, droids: 7, tankers: 0, speedScale: 1.15 },
   // A turning star around a counter-turning, breathing hexagon.
   {
     name: 'SPIN',
     keyframes: still(SPIN_STAR, SPIN_HEX),
     loop: false,
     droids: 7,
+    tankers: 1,
     speedScale: 1.15,
     motion: { outerSpin: 0.25, innerSpin: -0.4, breathe: { outer: 0.04, inner: -0.1, period: 6 } },
   },
@@ -66,6 +69,7 @@ export const LEVELS: LevelDef[] = [
     keyframes: still(OUTER_BAR, NO_INNER),
     loop: false,
     droids: 6,
+    tankers: 1,
     speedScale: 1.15,
     scoreAt: { x: 512, y: 92 },
   },
@@ -74,12 +78,13 @@ export const LEVELS: LevelDef[] = [
     keyframes: still(OUTER_PILLAR, NO_INNER),
     loop: false,
     droids: 6,
+    tankers: 1,
     speedScale: 1.2,
     scoreAt: { x: 196, y: 384 },
   },
-  { name: 'STAR', keyframes: still(OUTER_STAR, INNER_STAR), loop: false, droids: 7, speedScale: 1.2 },
+  { name: 'STAR', keyframes: still(OUTER_STAR, INNER_STAR), loop: false, droids: 7, tankers: 2, speedScale: 1.2 },
   // Four chambers: hyperspace (H) is the only way between them.
-  { name: 'MALTESE', keyframes: still(OUTER_MALTESE, INNER_HUB), loop: false, droids: 9, speedScale: 1.25 },
+  { name: 'MALTESE', keyframes: still(OUTER_MALTESE, INNER_HUB), loop: false, droids: 9, tankers: 2, speedScale: 1.25 },
   // Spinning, breathing and changing shape at once: a cross that becomes an octagon.
   {
     name: 'VORTEX',
@@ -89,6 +94,7 @@ export const LEVELS: LevelDef[] = [
     ],
     loop: true,
     droids: 9,
+    tankers: 2,
     speedScale: 1.3,
     motion: { outerSpin: 0.45, innerSpin: -0.6, breathe: { outer: 0.02, inner: -0.08, period: 4 } },
   },
@@ -102,6 +108,7 @@ export const LEVELS: LevelDef[] = [
     ],
     loop: true,
     droids: 8,
+    tankers: 2,
     speedScale: 1.35,
   },
 ];

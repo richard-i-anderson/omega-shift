@@ -197,6 +197,11 @@ const STAR8 = Array.from({ length: 16 }, (_, i) => {
   return [Math.cos(a) * r, Math.sin(a) * r];
 });
 
+const OCTAGON = Array.from({ length: 8 }, (_, i) => {
+  const a = ((i + 0.5) / 8) * TAU;
+  return [Math.cos(a), Math.sin(a)];
+});
+
 export function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, color: string, time: number, alpha = 1): void {
   const x = lerp(e.prevX, e.x, alpha);
   const y = lerp(e.prevY, e.y, alpha);
@@ -247,6 +252,25 @@ export function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, color: string
         [-0.5, -0.87],
       ]);
       break;
+    case 'tanker': {
+      // A heavy octagonal hull around a slowly turning core, with an arc of
+      // armour that shrinks as it takes hits. It flashes white when hit.
+      if (e.hitFlash > 0) glow(ctx, '#ffffff');
+      poly(ctx, x, y, e.spin * 0.25, e.r, OCTAGON);
+      poly(ctx, x, y, -e.spin, e.r * 0.5, [
+        [1, 0],
+        [0, 1],
+        [-1, 0],
+        [0, -1],
+      ]);
+      const armour = e.hp / e.maxHp;
+      ctx.globalAlpha = 0.8;
+      ctx.beginPath();
+      ctx.arc(x, y, e.r + 6, -Math.PI / 2, -Math.PI / 2 + armour * TAU);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      break;
+    }
     case 'photon': {
       const pulse = 0.6 + 0.4 * Math.sin(time * 8 + e.phase);
       ctx.globalAlpha = pulse;

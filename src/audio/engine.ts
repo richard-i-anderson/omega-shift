@@ -179,6 +179,10 @@ export class AudioEngine {
         return this.patch(fx.mineLaid[e.kind]);
       case 'promoted':
         return this.patch(fx.promoted[e.to]);
+      case 'tankerHit':
+        return this.patch(fx.tankerHit);
+      case 'tankerSpawn':
+        return this.patch(fx.tankerSpawn);
       case 'enemyKilled':
         // A smart bomb kills everything at once; its own crash stands in for the lot.
         return e.bombed ? undefined : this.patch(fx.enemyKilled[e.kind]);

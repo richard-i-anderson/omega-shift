@@ -3,10 +3,10 @@ import { EXPLOSION, type BlastKind } from '../src/config';
 import { blastSize, coolStep, COOL_STEPS, spawnBlast, updateParticles, type Particle } from '../src/entities/particles';
 import { Game } from '../src/game';
 
-const BY_DANGER: BlastKind[] = ['mine', 'droid', 'command', 'death', 'ship'];
+const BY_DANGER: BlastKind[] = ['mine', 'droid', 'command', 'death', 'tanker', 'ship'];
 
 describe('explosions', () => {
-  it('presets grow with danger: mine < droid < command < death < ship', () => {
+  it('presets grow with danger: mine < droid < command < death < tanker < ship', () => {
     for (let i = 1; i < BY_DANGER.length; i++) {
       const a = EXPLOSION.presets[BY_DANGER[i - 1]];
       const b = EXPLOSION.presets[BY_DANGER[i]];
@@ -21,13 +21,13 @@ describe('explosions', () => {
       expect(b.flash.radius).toBeGreaterThan(a.flash.radius);
       expect(b.shake).toBeGreaterThanOrEqual(a.shake);
     }
-    // Lines are 6–24 px; only the ship, death ships and the smart bomb shake the screen.
+    // Lines are 6–24 px; only the ship, death ships, tankers and the smart bomb shake the screen.
     for (const p of Object.values(EXPLOSION.presets)) {
       expect(p.len[0]).toBeGreaterThanOrEqual(6);
       expect(p.len[1]).toBeLessThanOrEqual(24);
     }
     const shakers = (Object.keys(EXPLOSION.presets) as BlastKind[]).filter((k) => EXPLOSION.presets[k].shake > 0);
-    expect(shakers.sort()).toEqual(['bomb', 'death', 'ship']);
+    expect(shakers.sort()).toEqual(['bomb', 'death', 'ship', 'tanker']);
   });
 
   it('spawns every part of a blast at rest in place, so interpolation does not streak', () => {

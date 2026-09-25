@@ -78,6 +78,7 @@ describe('game loop (headless)', () => {
     expect(rectCorner).toBeCloseTo(490);
     expect(game.arena.outer.radii[0]).toBeCloseTo(365);
     expect(game.enemies.filter((e) => e.kind === 'droid').length).toBe(6);
+    expect(game.enemies.filter((e) => e.kind === 'tanker').length).toBe(0);
     expect(game.waveSize).toBe(6);
   });
 
@@ -103,7 +104,8 @@ describe('game loop (headless)', () => {
     const start = arena.chamberAtPoint(ship.x, ship.y);
     expect(start).toBeGreaterThanOrEqual(0);
     expect(game.enemies.some((e) => arena.chamberAtPoint(e.x, e.y) === start)).toBe(false);
-    expect(game.enemies.length).toBe(9);
+    expect(game.enemies.filter((e) => e.kind === 'droid').length).toBe(9);
+    expect(game.enemies.filter((e) => e.kind === 'tanker').length).toBe(2);
 
     ship.invuln = 1e9; // the other chambers are full of droids
     const visited = [start];

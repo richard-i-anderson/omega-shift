@@ -1,4 +1,4 @@
-import type { EnemyKind } from './entities/enemies';
+import type { EnemyKind, SpawnKind } from './entities/enemies';
 import type { BonusKind } from './entities/bonus';
 
 /** What hit a force field. */
@@ -23,6 +23,10 @@ export type GameEvent =
   | { type: 'enemyFire'; kind: EnemyKind }
   | { type: 'mineLaid'; kind: 'photon' | 'vapor' }
   | { type: 'promoted'; to: 'command' | 'death' }
+  /** A tanker took a hit and survived, with `hp` hits left. */
+  | { type: 'tankerHit'; x: number; y: number; hp: number }
+  /** A tanker launched a ship. */
+  | { type: 'tankerSpawn'; kind: SpawnKind; x: number; y: number }
   /** `bombed`: killed by a smart bomb, which has its own sound. */
   | { type: 'enemyKilled'; kind: EnemyKind; x: number; y: number; bombed?: boolean }
   | { type: 'bonusDropped'; kind: BonusKind; x: number; y: number }

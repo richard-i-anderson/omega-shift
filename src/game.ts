@@ -2,7 +2,19 @@ import { Arena } from './arena/arena';
 import { DTHETA } from './arena/field';
 import { Bullet } from './entities/bullet';
 import { isBonusDropper, makeBonus, pickBonusKind, updateBonus, type Bonus, type BonusKind } from './entities/bonus';
-import { isHunter, isMine, makeDroid, makeMine, promote, updateEnemy, type Enemy, type EnemyWorld } from './entities/enemies';
+import {
+  isHunter,
+  isMine,
+  isShip,
+  makeDroid,
+  makeMine,
+  makeTanker,
+  promote,
+  updateEnemy,
+  type Enemy,
+  type EnemyWorld,
+  type SpawnKind,
+} from './entities/enemies';
 import { spawnBlast, updateParticles, type Particle } from './entities/particles';
 import { Ship } from './entities/ship';
 import {
@@ -38,6 +50,7 @@ export const ENEMY_COLORS: Record<Enemy['kind'], string> = {
   droid: '#ff4fd8',
   command: '#ffe14f',
   death: '#ff4040',
+  tanker: '#9a7bff',
   photon: '#6dff8a',
   vapor: '#ff9a3c',
 };
@@ -45,6 +58,11 @@ export const ENEMY_COLORS: Record<Enemy['kind'], string> = {
 /** Where the player (re)spawns and where droids start: opposite sides of the track. */
 const SHIP_SPAWN_THETA = Math.PI;
 const DROID_SPAWN_THETA = 0;
+/**
+ * Where tankers start on a connected level: a quarter turn from both the ship
+ * and the droids, then between them.
+ */
+const TANKER_SPAWN_THETAS = [Math.PI / 2, (3 * Math.PI) / 2, (7 * Math.PI) / 4];
 /** Pixels between droids along the track when a wave spawns. */
 const DROID_SPACING = 50;
 /** Debug keys that jump to levels 1–9, 10 (`0`) and 11 (`-`). */
@@ -57,6 +75,7 @@ const ENEMY_BLAST: Record<Enemy['kind'], BlastKind> = {
   droid: 'droid',
   command: 'command',
   death: 'death',
+  tanker: 'tanker',
   photon: 'mine',
   vapor: 'mine',
 };
@@ -92,7 +111,7 @@ export class Game {
   stateTimer = 0;
   /** True on the card shown after clearing a wave (vs. the start of a game). */
   justCleared = false;
-  /** Ships in the current wave when it spawned (the sound speeds up as they fall). */
+  /** Ships in the current wave: those it spawned with plus any tankers launched (the sound speeds up as they fall). */
   waveSize = 0;
   private respawnTimer = 0;
   private promoteTimer = 0;
@@ -239,7 +258,8 @@ export class Game {
   private spawnWave(): void {
     const { def, cycle } = levelFor(this.levelIndex);
     const count = def.droids + 2 * cycle;
-    this.waveSize = count;
+    const tankers = Math.min(def.tankers + cycle, TANKER_SPAWN_THETAS.length);
+    this.waveSize = count + tankers;
     const arena = this.arena;
     if (!this.ship) this.spawnShip(arena.openAngle(SHIP_SPAWN_THETA, SHIP.radius + 10));
     this.enemies = [];
@@ -260,6 +280,19 @@ export class Game {
         const spacing = Math.min(DROID_SPACING, (width * 0.6) / Math.max(n, 1));
         for (const theta of this.trackSpread(mid, n, spacing)) this.enemies.push(makeDroid(this.arena, theta));
       });
+    }
+    // Tankers start away from the droids: a quarter turn round a connected
+    // level, or near the end of the droids' chambers.
+    const clearance = ENEMY.radius.tanker + 10;
+    for (let i = 0; i < tankers; i++) {
+      let theta = TANKER_SPAWN_THETAS[i];
+      if (!arena.isRing) {
+        const here = arena.chamberAtPoint(this.ship!.x, this.ship!.y);
+        const others = arena.chambers.map((_, c) => c).filter((c) => c !== here);
+        const c = others.length ? others[i % others.length] : 0;
+        theta = arena.chamberAngle(c, 0.85);
+      }
+      this.enemies.push(makeTanker(arena, arena.openAngle(theta, clearance), this.scale));
     }
     this.promoteTimer = ENEMY.promoteEvery / this.scale;
     this.bonusTimer = rand(BONUS.dropEvery[0], BONUS.dropEvery[1]);
@@ -415,6 +448,7 @@ export class Game {
           this.emit({ type: 'mineLaid', kind });
         }
       },
+      spawn: (kind, from) => this.launch(kind, from),
       emit: (e) => this.emit(e),
     };
     const dirs = this.enemies.map((e) => e.dir);
@@ -433,6 +467,28 @@ export class Game {
     }
     for (const b of this.enemyBullets) b.update(dt, this.arena);
     this.enemyBullets = this.enemyBullets.filter((b) => !b.dead);
+  }
+
+  /**
+   * A tanker launches a ship where it is. Hunters past `maxHunters` come out
+   * as droids, and nothing comes out while `maxShips` are alive.
+   */
+  private launch(kind: SpawnKind, from: Enemy): void {
+    if (this.enemies.filter((e) => !e.dead && isShip(e)).length >= ENEMY.maxShips) return;
+    if (kind !== 'droid' && this.enemies.filter(isHunter).length >= ENEMY.maxHunters) kind = 'droid';
+    const arena = this.arena;
+    const e = makeDroid(arena, from.theta);
+    // In a chamber, join the droids' formation so they don't pass through each other.
+    if (!arena.isRing) {
+      const c = arena.chamberAt(e.theta);
+      e.dir = this.enemies.find((o) => o.kind === 'droid' && arena.chamberAt(o.theta) === c)?.dir ?? 1;
+    }
+    if (kind !== 'droid') promote(e, this.scale);
+    if (kind === 'death') promote(e, this.scale);
+    this.enemies.push(e);
+    this.waveSize++;
+    this.blast('hyper', e.x, e.y, ENEMY_COLORS[kind]);
+    this.emit({ type: 'tankerSpawn', kind, x: e.x, y: e.y });
   }
 
   private updatePlay(dt: number, input: Input): void {
@@ -459,7 +515,7 @@ export class Game {
         const rr = e.r + b.r + 2;
         if (dist2(b.x, b.y, e.x, e.y) < rr * rr) {
           b.dead = true;
-          this.killEnemy(e);
+          this.hitEnemy(e, b.x, b.y);
         }
       }
     }
@@ -480,9 +536,19 @@ export class Game {
       if (this.respawnTimer <= 0) this.respawnShip();
     }
 
-    if (this.state === 'playing' && !this.enemies.some((e) => e.kind === 'droid' || isHunter(e))) {
+    if (this.state === 'playing' && !this.enemies.some(isShip)) {
       this.levelCleared();
     }
+  }
+
+  /** A player's shot hit `e` at (x, y). Tankers take several hits, and may shed a droid when hit. */
+  private hitEnemy(e: Enemy, x: number, y: number): void {
+    if (e.hp <= 1) return this.killEnemy(e);
+    e.hp--;
+    e.hitFlash = 0.08;
+    this.blast('mine', x, y, ENEMY_COLORS[e.kind]);
+    this.emit({ type: 'tankerHit', x: e.x, y: e.y, hp: e.hp });
+    if (Math.random() < ENEMY.tankerHitSpawnChance) this.launch('droid', e);
   }
 
   private killEnemy(e: Enemy, bombed = false): void {
@@ -490,6 +556,8 @@ export class Game {
     this.blast(ENEMY_BLAST[e.kind], e.x, e.y, ENEMY_COLORS[e.kind]);
     this.addScore(SCORE[e.kind]);
     this.emit({ type: 'enemyKilled', kind: e.kind, x: e.x, y: e.y, bombed });
+    // A destroyed tanker always leaves a bonus, even past `BONUS.maxLive`.
+    if (e.kind === 'tanker') this.dropBonus(pickBonusKind('tanker'), e.x, e.y);
   }
 
   /**
@@ -540,12 +608,23 @@ export class Game {
     this.emit({ type: 'bonusCollected', kind: b.kind, x: b.x, y: b.y });
   }
 
-  /** Kill every enemy in the arena (all chambers), mines included, and their shots. */
+  /**
+   * Kill every enemy in the arena (all chambers), mines included, and their
+   * shots. Tankers only take damage, and are always left with a hit to spare.
+   */
   private smartBomb(ship: Ship): void {
     this.bombs--;
     this.blast('bomb', ship.x, ship.y, '#ffffff');
     this.emit({ type: 'smartBomb', x: ship.x, y: ship.y });
-    for (const e of this.enemies) if (!e.dead) this.killEnemy(e, true);
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      if (e.kind === 'tanker') {
+        e.hp = Math.max(1, e.hp - ENEMY.tankerBombHits);
+        e.hitFlash = 0.08;
+      } else {
+        this.killEnemy(e, true);
+      }
+    }
     this.enemyBullets = [];
   }
 

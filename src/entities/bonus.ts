@@ -20,7 +20,7 @@ export function makeBonus(kind: BonusKind, x: number, y: number): Bonus {
 }
 
 /** Which bonus a ship of this kind leaves, by the weights in `BONUS`. */
-export function pickBonusKind(from: 'droid' | 'command' | 'death', rand: () => number = Math.random): BonusKind {
+export function pickBonusKind(from: keyof typeof BONUS.weights, rand: () => number = Math.random): BonusKind {
   const w = BONUS.weights[from];
   let roll = rand() * (w.points + w.bomb + w.life);
   if ((roll -= w.life) < 0) return 'life';

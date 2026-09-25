@@ -34,13 +34,30 @@ export const ENEMY = {
   maxMines: 12,
   bulletSpeed: 250,
   bulletLife: 2.6,
-  radius: { droid: 11, command: 12, death: 11, photon: 6, vapor: 9 },
+  radius: { droid: 11, command: 12, death: 11, tanker: 20, photon: 6, vapor: 9 },
+  // Tankers: slow, armoured, and they keep launching ships until destroyed,
+  // so a wave can't be cleared in seconds by picking off the droids.
+  tankerSpeed: 32,
+  // Hits to destroy one at speed scale 1 (scaled with the level's speed).
+  tankerHp: 12,
+  // Seconds between launches, before dividing by the speed scale.
+  tankerSpawnEvery: [2.5, 5],
+  // What it launches. Command and death ships still count towards
+  // `maxHunters`; past it, a droid comes out instead.
+  tankerSpawnWeights: { droid: 0.65, command: 0.25, death: 0.1 },
+  // A smart bomb does as much damage as this many hits, but never destroys one.
+  tankerBombHits: 4,
+  // Chance that a hit which doesn't destroy it knocks a droid loose.
+  tankerHitSpawnChance: 0.2,
+  // Launches stop while this many ships (tankers included) are alive.
+  maxShips: 16,
 } as const;
 
 export const SCORE = {
   droid: 1000,
   command: 1500,
   death: 2500,
+  tanker: 5000,
   photon: 350,
   vapor: 500,
   extraLifeEvery: 40000,
@@ -82,6 +99,11 @@ export const EXPLOSION = {
       shards: 54, sparks: 40, speed: 400, sparkSpeed: 740, len: [9, 22], sparkLen: [9, 16],
       life: [0.7, 1.45], drag: 2.3, spin: 14, curl: 0,
       ring: { radius: 145, life: 0.5 }, flash: { radius: 62, life: 0.17 }, shake: 6,
+    },
+    tanker: {
+      shards: 64, sparks: 48, speed: 420, sparkSpeed: 780, len: [10, 23], sparkLen: [9, 17],
+      life: [0.8, 1.6], drag: 2.1, spin: 14, curl: 0,
+      ring: { radius: 170, life: 0.55 }, flash: { radius: 72, life: 0.2 }, shake: 8,
     },
     ship: {
       shards: 72, sparks: 56, speed: 440, sparkSpeed: 820, len: [10, 24], sparkLen: [10, 18],
@@ -207,6 +229,8 @@ export const BONUS = {
     droid: { points: 0.7, bomb: 0.2, life: 0.1 },
     command: { points: 0.45, bomb: 0.35, life: 0.2 },
     death: { points: 0.3, bomb: 0.4, life: 0.3 },
+    // A destroyed tanker always leaves one.
+    tanker: { points: 0.2, bomb: 0.4, life: 0.4 },
   },
   // Collected-bonus text floats up and fades over this many seconds.
   popupLife: 1.4,
@@ -376,6 +400,12 @@ export const SOUND = {
         { wave: 'square', freq: 320, freqEnd: 30, decay: 1.2, gain: 0.35 },
         { wave: 'sawtooth', freq: 150, freqEnd: 25, decay: 1, gain: 0.25 },
       ],
+      // Deeper and longer than a death ship, with a second, delayed boom.
+      tanker: [
+        { wave: 'noise', decay: 1.8, gain: 0.65, filter: { type: 'lowpass', freq: 7000, freqEnd: 70 } },
+        { wave: 'square', freq: 200, freqEnd: 22, decay: 1.5, gain: 0.38 },
+        { wave: 'sawtooth', freq: 110, freqEnd: 20, delay: 0.25, decay: 1.3, gain: 0.3 },
+      ],
       // Mines pop.
       photon: [
         { wave: 'square', freq: 1500, freqEnd: 300, decay: 0.08, gain: 0.2 },
@@ -386,6 +416,16 @@ export const SOUND = {
         { wave: 'noise', decay: 0.12, gain: 0.15, filter: { type: 'highpass', freq: 2000 } },
       ],
     },
+    // A tanker shrugging off a hit: a hard metallic clank.
+    tankerHit: [
+      { wave: 'square', freq: 520, freqEnd: 260, decay: 0.08, gain: 0.3 },
+      { wave: 'noise', decay: 0.05, gain: 0.2, filter: { type: 'bandpass', freq: 3200, q: 3 } },
+    ],
+    // A tanker launching a ship: a low rising "blorp".
+    tankerSpawn: [
+      { wave: 'square', freq: 90, freqEnd: 420, attack: 0.01, decay: 0.22, gain: 0.22, filter: { type: 'lowpass', freq: 2000 } },
+      { wave: 'square', freq: 420, delay: 0.2, decay: 0.08, gain: 0.14 },
+    ],
     // A bright two-tone "bling" so the player notices a bonus has appeared.
     bonusDropped: [
       { wave: 'square', freq: 1760, decay: 0.06, gain: 0.14 },
