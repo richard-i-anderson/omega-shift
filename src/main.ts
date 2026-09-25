@@ -6,6 +6,7 @@ import { Input } from './input';
 import { startLoop } from './loop';
 import { COLORS, drawArena, drawBullets, drawDebug, drawEnemy, drawParticles, drawShip } from './render/draw';
 import { drawHud, drawOverlay } from './render/hud';
+import { drawWelcome } from './render/welcome';
 import { drawBonuses, drawPopups } from './render/bonus';
 import { Starfield } from './render/stars';
 import { PerfOverlay } from './render/perf';
@@ -19,6 +20,9 @@ const stars = new Starfield();
 const perf = new PerfOverlay();
 const audio = new AudioEngine();
 audio.attach(window);
+// Any key or click puts off the welcome text on the title screen.
+window.addEventListener('keydown', () => game.wake());
+window.addEventListener('pointerdown', () => game.wake());
 
 // Letterbox the fixed logical world into the window, at device resolution.
 let scale = 1;
@@ -55,6 +59,7 @@ function render(alpha: number): void {
   drawPopups(ctx, game.popups, game.time);
   if (game.state !== 'title') drawHud(ctx, game);
   drawOverlay(ctx, game);
+  if (game.state === 'title') drawWelcome(ctx, game.idle, game.time);
   if (game.showDebug) drawDebug(ctx, game.arena);
   perf.draw(ctx);
 }

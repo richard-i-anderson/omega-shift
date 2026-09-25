@@ -13,6 +13,7 @@ const FONT = '"Courier New", ui-monospace, monospace';
 const hue = (time: number, offset: number) => `hsl(${(time * 220 + offset) % 360}, 100%, 62%)`;
 
 export function drawBonuses(ctx: CanvasRenderingContext2D, bonuses: Bonus[], time: number, alpha = 1): void {
+  const base = ctx.globalAlpha; // partial alphas are relative to it, so a caller can fade bonuses
   bonuses.forEach((b, i) => {
     const expiring = b.age > BONUS.life - BONUS.blinkLast;
     if (expiring && Math.floor(time * 8) % 2 === 0) return;
@@ -32,12 +33,12 @@ export function drawBonuses(ctx: CanvasRenderingContext2D, bonuses: Bonus[], tim
     ctx.stroke();
     // A faint outer ring in the complementary hue.
     ctx.lineWidth = 1.5;
-    ctx.globalAlpha = 0.5;
+    ctx.globalAlpha = base * 0.5;
     ctx.strokeStyle = ctx.shadowColor = hue(time, off + 180);
     ctx.beginPath();
     ctx.arc(x, y, r + 5, 0, TAU);
     ctx.stroke();
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = base;
     // Three sparks orbiting.
     for (let k = 0; k < 3; k++) {
       const a = time * 4 + (k * TAU) / 3 + i;

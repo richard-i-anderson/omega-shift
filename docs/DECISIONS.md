@@ -95,6 +95,16 @@ The user saw jittery motion on a display of unknown refresh rate. Measured first
 - **A smart bomb can't destroy one** (the user's rule): it does the damage of `ENEMY.tankerBombHits` (4) hits and always leaves at least one, so a bomb clears the tanker's escorts but never the wave. The first version let a bomb destroy it like everything else.
 - **Not yet playtested.** The hit count, launch rate and weights are first guesses, like the rest of `ENEMY`.
 
+## Welcome text
+
+- **The brief:** text that appears over the title screen once it has sat waiting for a few seconds, in a vector font, telling the story (pilots in training, as in the original Omega Race) and explaining the enemy types.
+- **The story is our own wording**, in the spirit of the original's premise (cadets trained against robot droid ships in a force-field arena), not a quotation, and it adds the arena that now shifts shape.
+- **Two pages over the title**, not a separate screen: `YOUR MISSION`, then `KNOW YOUR ENEMY` (each ship's icon, name, points and a one-line description, plus mines and bonuses). Points come from `SCORE`, so they can't drift. 5 s untouched, then 16 s per page, typing at 80 characters/s, fading over 0.5 s, then 6 s of the plain title before it starts again. Any key or click resets the wait. The panel sits between the title and "PRESS ENTER", so both stay readable.
+- **Our own stroke font** instead of a font file: the project has no assets or dependencies, and polylines on a 4×6 grid are exactly what vector arcade lettering was. Zero is slashed so it isn't read as O. The whole page is added to one path per string and drawn with `haloStroke` (no `shadowBlur`, since a page-sized blurred path is expensive; see Performance).
+- **Sprites respect the caller's `globalAlpha`** (`drawEnemy`, `drawBonuses`), so the icons fade with the page. They used to reset it to 1.
+- **Checked in headless Chrome** with a temporary page (since deleted) that renders the title with each page fully typed.
+- **Title screen only.** The game-over screen still waits for Enter without it.
+
 ## Sound
 
 - **The brief:** 80s-style sound; a sound whenever anything hits a force field; each enemy distinctive, more urgent the more dangerous it is. The user chose both a background pulse set by danger and per-action one-shots, with M toggling mute (remembered).

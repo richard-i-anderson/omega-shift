@@ -50,6 +50,7 @@ The twist is in the name: the force fields change shape.
 - **Isolated chambers and hyperspace.** The Maltese cross seals its four arms off from each other. Press **H** to hyperspace into the next arm (anywhere else, H jumps you to a random spot).
 - **Tankers.** From level 5 on, armoured violet tankers crawl the track against the droids. They take a dozen or more hits, and until you destroy one it keeps launching droids, command ships and even death ships. A smart bomb only dents one. Each one you destroy leaves a bonus.
 - **Bonuses.** Enemy ships leave rainbow-ringed bonuses behind as they fly: an extra life (up to six), 5,000 points, or a **smart bomb** that destroys every enemy in the arena (apart from tankers) when you press **B**.
+- **A welcome briefing.** Leave the title screen alone for a few seconds and the story and a guide to the enemies type themselves out in a vector font.
 - **Pizzazz.**
   - Explosions scale with the size of what blew up: tumbling shards, sparks, a shockwave and screen shake.
   - A coloured, drifting starfield that flares around explosions and warps when you hyperspace.

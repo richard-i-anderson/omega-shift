@@ -43,7 +43,7 @@ const HALO = [
   { extra: 3, alpha: 0.22 },
 ];
 
-function haloStroke(ctx: CanvasRenderingContext2D, color: string, width: number, alpha = 1, strength = 1): void {
+export function haloStroke(ctx: CanvasRenderingContext2D, color: string, width: number, alpha = 1, strength = 1): void {
   ctx.shadowBlur = 0;
   ctx.strokeStyle = color;
   for (const h of HALO) {
@@ -205,6 +205,8 @@ const OCTAGON = Array.from({ length: 8 }, (_, i) => {
 export function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, color: string, time: number, alpha = 1): void {
   const x = lerp(e.prevX, e.x, alpha);
   const y = lerp(e.prevY, e.y, alpha);
+  // Partial alphas below are relative to this, so a caller can fade the sprite.
+  const base = ctx.globalAlpha;
   ctx.lineWidth = 2;
   glow(ctx, color);
   switch (e.kind) {
@@ -264,16 +266,16 @@ export function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, color: string
         [0, -1],
       ]);
       const armour = e.hp / e.maxHp;
-      ctx.globalAlpha = 0.8;
+      ctx.globalAlpha = base * 0.8;
       ctx.beginPath();
       ctx.arc(x, y, e.r + 6, -Math.PI / 2, -Math.PI / 2 + armour * TAU);
       ctx.stroke();
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = base;
       break;
     }
     case 'photon': {
       const pulse = 0.6 + 0.4 * Math.sin(time * 8 + e.phase);
-      ctx.globalAlpha = pulse;
+      ctx.globalAlpha = base * pulse;
       poly(ctx, x, y, Math.PI / 4, e.r, [
         [1, 0],
         [-1, 0],
@@ -285,7 +287,7 @@ export function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, color: string
       ctx.beginPath();
       ctx.arc(x, y, 1.5, 0, TAU);
       ctx.fill();
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = base;
       break;
     }
     case 'vapor':

@@ -246,6 +246,18 @@ export const ARENA = {
   restitution: 0.9,
 } as const;
 
+// Welcome text over the title screen (src/welcome.ts): it starts once no key
+// has been pressed for `delay` s, shows each page for `pageSec` (typing at
+// `typeRate` characters/s, fading in and out over `fadeSec`), then leaves
+// just the title for `gapSec` before starting again.
+export const WELCOME = {
+  delay: 5,
+  pageSec: 16,
+  gapSec: 6,
+  fadeSec: 0.5,
+  typeRate: 80,
+} as const;
+
 export const LEVEL_CLEAR_SEC = 3;
 export const LEVEL_TRANSITION_SEC = 2.5;
 

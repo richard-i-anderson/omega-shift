@@ -111,6 +111,8 @@ export class Game {
   stateTimer = 0;
   /** True on the card shown after clearing a wave (vs. the start of a game). */
   justCleared = false;
+  /** Seconds on the title screen since a key was last pressed (the welcome text waits for it). */
+  idle = 0;
   /** Ships in the current wave: those it spawned with plus any tankers launched (the sound speeds up as they fall). */
   waveSize = 0;
   private respawnTimer = 0;
@@ -201,6 +203,7 @@ export class Game {
 
     switch (this.state) {
       case 'title':
+        this.idle += dt;
         if (input.wasPressed('Enter', 'Space')) this.startGame();
         break;
       case 'playing':
@@ -218,6 +221,11 @@ export class Game {
     }
     for (const h of this.arena.hits) this.emit({ type: 'fieldHit', impact: h.impact, source: h.source });
     this.arena.hits.length = 0;
+  }
+
+  /** Someone pressed a key or clicked: restart the wait before the welcome text. */
+  wake(): void {
+    this.idle = 0;
   }
 
   private emit(e: GameEvent): void {
