@@ -17,6 +17,7 @@ npx vitest run tests/collide.test.ts        # one file
 npx vitest run -t "concave corner"          # tests matching a name
 npm run typecheck    # tsc --noEmit
 npm run build        # typecheck + static bundle in dist/
+npm run package:itch # build and zip dist/ as omega-shift-itch.zip for itch.io
 ```
 
 The high-score API is a Cloudflare Worker in `worker/` (deployed separately from the site):

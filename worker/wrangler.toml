@@ -5,7 +5,8 @@ main = "src/index.ts"
 compatibility_date = "2026-09-01"
 
 [vars]
-ALLOWED_ORIGINS = "https://richard-i-anderson.github.io,http://localhost:5173"
+# GitHub Pages, itch.io (its HTML games run in iframes on these two hosts), and the dev server.
+ALLOWED_ORIGINS = "https://richard-i-anderson.github.io,https://html-classic.itch.zone,https://html.itch.zone,http://localhost:5173"
 
 [[d1_databases]]
 binding = "DB"
