@@ -27,17 +27,25 @@ import {
   LEVEL_TRANSITION_SEC,
   MAX_LIVES,
   SCORE,
+  SCORES,
   SHIP,
   START_LIVES,
   WORLD,
   type BlastKind,
 } from './config';
 import { MAX_PENDING_EVENTS, type GameEvent } from './events';
+import { checkName, cleanName, NAME_CHARS, NAME_LEN, type ScoreEntry } from '../shared/scores';
 import type { Input } from './input';
 import { LEVELS, levelFor, tankersFor, validateLevel } from './levels/levels';
 import { dist2, rand, smoothstep, TAU } from './math/vec';
 
-export type GameState = 'title' | 'playing' | 'levelClear' | 'gameOver';
+export type GameState = 'title' | 'playing' | 'levelClear' | 'gameOver' | 'enterName';
+
+/** The high scores `main.ts` hands the game: the global top 10 (null while unreachable) and this device's best. */
+export interface Board {
+  global: ScoreEntry[] | null;
+  best: ScoreEntry | null;
+}
 
 /** Text that floats up from a collected bonus. */
 export interface Popup {
@@ -115,6 +123,20 @@ export class Game {
   idle = 0;
   /** Ships in the current wave: those it spawned with plus any tankers launched (the sound speeds up as they fall). */
   waveSize = 0;
+  /** High scores, filled in by the browser layer (the game never fetches anything). */
+  board: Board = { global: null, best: null };
+  /** Name entry: one character of `NAME_CHARS` per slot, and the slot being edited. */
+  nameSlots: string[] = [];
+  nameCursor = 0;
+  /** Why the last name was refused, shown for `SCORES.rejectSec`. */
+  nameRejected: { reason: 'empty' | 'invalid' | 'rude'; t: number } | null = null;
+  /** The score entered at the end of this game, highlighted on the board. */
+  lastEntry: ScoreEntry | null = null;
+  /** Seconds this game has lasted (the score Worker checks it's plausible). */
+  playSeconds = 0;
+  private entryIdle = 0;
+  /** Whether this game's end has already asked for a name. */
+  private entryOffered = false;
   /** Seconds since the game ended; at `GAME_OVER_SEC` it goes back to the title. */
   private gameOverTime = 0;
   private respawnTimer = 0;
@@ -184,7 +206,7 @@ export class Game {
       if (input.wasPressed('Backquote')) this.showDebug = !this.showDebug;
       LEVEL_KEYS.slice(0, LEVELS.length).forEach((key, i) => {
         if (input.wasPressed(key)) {
-          if (this.state === 'title' || this.state === 'gameOver') this.resetRun();
+          if (this.state === 'title' || this.state === 'gameOver' || this.state === 'enterName') this.resetRun();
           this.beginLevel(i, LEVEL_TRANSITION_SEC);
         }
       });
@@ -209,9 +231,11 @@ export class Game {
         if (input.wasPressed('Enter', 'Space')) this.startGame();
         break;
       case 'playing':
+        this.playSeconds += dt;
         this.updatePlay(dt, input);
         break;
       case 'levelClear':
+        this.playSeconds += dt;
         this.updateShipAndShots(dt, input);
         this.updateBonuses(dt, false); // still collectable while the arena changes shape
         if (this.stateTimer <= 0) this.spawnWave();
@@ -219,8 +243,20 @@ export class Game {
       case 'gameOver':
         this.updateEnemies(dt);
         this.gameOverTime += dt;
+        // After the banner, a high score asks for a name.
+        if (this.stateTimer <= 0 && !this.entryOffered) {
+          this.entryOffered = true;
+          if (this.qualifies()) {
+            this.beginNameEntry();
+            break;
+          }
+        }
         if (this.stateTimer <= 0 && input.wasPressed('Enter', 'Space')) this.startGame();
         else if (this.gameOverTime >= GAME_OVER_SEC) this.returnToTitle();
+        break;
+      case 'enterName':
+        this.updateEnemies(dt);
+        this.updateNameEntry(dt, input);
         break;
     }
     for (const h of this.arena.hits) this.emit({ type: 'fieldHit', impact: h.impact, source: h.source });
@@ -236,7 +272,79 @@ export class Game {
     if (this.events.length < MAX_PENDING_EVENTS) this.events.push(e);
   }
 
+  /** Whether the score just made earns a place: this device's best, or the global top 10. */
+  qualifies(): boolean {
+    const { score } = this;
+    if (score <= 0) return false;
+    const { best, global } = this.board;
+    if (!best || score > best.score) return true;
+    return !!global && (global.length < 10 || score > global[global.length - 1].score);
+  }
+
+  private beginNameEntry(): void {
+    this.state = 'enterName';
+    // Start from the name last used on this device, to save retyping it.
+    const prev = (this.board.best?.name ?? 'A').padEnd(NAME_LEN, ' ');
+    this.nameSlots = prev.slice(0, NAME_LEN).split('');
+    this.nameCursor = 0;
+    this.nameRejected = null;
+    this.entryIdle = 0;
+  }
+
+  /**
+   * Arcade-style name entry: up/down cycle the letter in the current slot
+   * (A–Z, then blank), left/right move between slots, Enter accepts.
+   */
+  private updateNameEntry(dt: number, input: Input): void {
+    this.entryIdle += dt;
+    if (this.nameRejected && (this.nameRejected.t -= dt) <= 0) this.nameRejected = null;
+    const step = (d: number) => {
+      const i = NAME_CHARS.indexOf(this.nameSlots[this.nameCursor]);
+      this.nameSlots[this.nameCursor] = NAME_CHARS[(i + d + NAME_CHARS.length) % NAME_CHARS.length];
+    };
+    let edited = true;
+    if (input.wasPressed('ArrowUp', 'KeyW')) step(1);
+    else if (input.wasPressed('ArrowDown', 'KeyS')) step(-1);
+    else if (input.wasPressed('ArrowLeft', 'KeyA')) this.nameCursor = Math.max(0, this.nameCursor - 1);
+    else if (input.wasPressed('ArrowRight', 'KeyD')) this.nameCursor = Math.min(NAME_LEN - 1, this.nameCursor + 1);
+    else edited = false;
+    if (edited) {
+      this.entryIdle = 0;
+      this.emit({ type: 'nameEdit' });
+    }
+    if (input.wasPressed('Enter')) {
+      this.entryIdle = 0;
+      const name = cleanName(this.nameSlots);
+      const check = checkName(name);
+      if (check === 'ok') this.acceptName(name);
+      else {
+        this.nameRejected = { reason: check, t: SCORES.rejectSec };
+        this.emit({ type: 'nameRejected', reason: check });
+      }
+    } else if (this.entryIdle >= SCORES.nameEntryTimeout) {
+      this.endNameEntry();
+    }
+  }
+
+  private acceptName(name: string): void {
+    const entry: ScoreEntry = { name, score: this.score, level: this.levelIndex + 1 };
+    this.lastEntry = entry;
+    if (!this.board.best || entry.score > this.board.best.score) this.board.best = entry;
+    this.emit({ type: 'scoreEntered', ...entry, seconds: this.playSeconds });
+    this.endNameEntry();
+  }
+
+  /** Back to the game-over screen, now showing the board, with its 15 s to the title starting again. */
+  private endNameEntry(): void {
+    this.state = 'gameOver';
+    this.gameOverTime = 0;
+    this.stateTimer = 1; // so the Enter that accepted the name can't also start a game
+  }
+
   private resetRun(): void {
+    this.playSeconds = 0;
+    this.entryOffered = false;
+    this.lastEntry = null;
     this.score = 0;
     this.lives = START_LIVES;
     this.bombs = 0;

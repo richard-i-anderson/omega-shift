@@ -35,6 +35,11 @@ export type GameEvent =
   /** The shield has `left` whole seconds to go (the last few only). */
   | { type: 'shieldTick'; left: number }
   | { type: 'shieldDown' }
+  /** Name entry: a letter changed or the cursor moved. */
+  | { type: 'nameEdit' }
+  | { type: 'nameRejected'; reason: 'empty' | 'invalid' | 'rude' }
+  /** The player entered a name for a high score; the browser layer saves and submits it. */
+  | { type: 'scoreEntered'; name: string; score: number; level: number; seconds: number }
   | { type: 'extraLife' }
   | { type: 'waveStart' }
   | { type: 'waveCleared' }

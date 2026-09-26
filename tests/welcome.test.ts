@@ -36,14 +36,22 @@ describe('welcome text', () => {
 
   it('the font has every character the pages use, and the lines fit the panel', () => {
     const strings = WELCOME_PAGES.flatMap((p) =>
-      p.kind === 'story' ? [p.title, ...p.lines] : [p.title, ...p.rows.flatMap((r) => [r.name, r.points, r.text])],
+      p.kind === 'story'
+        ? [p.title, ...p.lines]
+        : p.kind === 'enemies'
+          ? [p.title, ...p.rows.flatMap((r) => [r.name, r.points, r.text])]
+          : [],
     );
     for (const s of strings) for (const ch of s) expect(hasGlyph(ch), `"${ch}" in "${s}"`).toBe(true);
     for (const p of WELCOME_PAGES) {
       if (p.kind === 'story') for (const l of p.lines) expect(textWidth(l, 13)).toBeLessThan(800);
       // Descriptions start at x 190 and must stay inside the panel's right edge (932).
-      else for (const r of p.rows) expect(190 + textWidth(r.text, 11)).toBeLessThan(900);
+      else if (p.kind === 'enemies') for (const r of p.rows) expect(190 + textWidth(r.text, 11)).toBeLessThan(900);
     }
+  });
+
+  it('ends with the high-score board', () => {
+    expect(WELCOME_PAGES.at(-1)?.kind).toBe('scores');
   });
 
   it('counts idle time on the title only, and any key resets it', () => {

@@ -26,7 +26,12 @@ export interface EnemyPage {
   rows: EnemyRow[];
 }
 
-export type WelcomePage = StoryPage | EnemyPage;
+/** The high-score board, drawn from `game.board` at the time (see `drawBoard`). */
+export interface ScoresPage {
+  kind: 'scores';
+}
+
+export type WelcomePage = StoryPage | EnemyPage | ScoresPage;
 
 export const WELCOME_PAGES: readonly WelcomePage[] = [
   {
@@ -84,10 +89,12 @@ export const WELCOME_PAGES: readonly WelcomePage[] = [
       },
     ],
   },
+  { kind: 'scores' },
 ];
 
 /** Characters a page types out, in order (what `WelcomeView.chars` counts). */
 export function pageLength(page: WelcomePage): number {
+  if (page.kind === 'scores') return 0; // shown whole, not typed
   if (page.kind === 'story') return page.title.length + page.lines.reduce((n, l) => n + l.length, 0);
   return page.title.length + page.rows.reduce((n, r) => n + r.name.length + r.points.length + r.text.length, 0);
 }

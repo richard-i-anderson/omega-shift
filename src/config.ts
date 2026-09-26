@@ -268,6 +268,19 @@ export const WELCOME = {
   typeRate: 80,
 } as const;
 
+// High scores (shared/scores.ts has the name and plausibility rules; the
+// global board is the Worker in worker/). A game that beats this device's
+// best or makes the global top 10 asks for a name; with no key pressed for
+// `nameEntryTimeout` s it gives up. The device best is kept in localStorage.
+export const SCORES = {
+  nameEntryTimeout: 30,
+  storageKey: 'omegaShift.best',
+  // Give up on the Worker after this many ms.
+  fetchTimeoutMs: 5000,
+  // "NAME NOT ALLOWED" and similar messages show for this long.
+  rejectSec: 1.6,
+} as const;
+
 // Like an arcade cabinet left alone, the game-over screen goes back to the
 // title (and its welcome text) after this many seconds.
 export const GAME_OVER_SEC = 15;
@@ -458,6 +471,20 @@ export const SOUND = {
     shieldDown: [
       { wave: 'triangle', freq: 1400, freqEnd: 180, decay: 0.45, gain: 0.22 },
       { wave: 'noise', decay: 0.3, gain: 0.12, filter: { type: 'highpass', freq: 2500 } },
+    ],
+    // Name entry: a tick per letter change or move, a buzz for a refused
+    // name, and a fanfare when it's accepted.
+    nameEdit: [{ wave: 'square', freq: 880, decay: 0.04, gain: 0.12 }],
+    nameRejected: [
+      { wave: 'sawtooth', freq: 150, decay: 0.3, gain: 0.25 },
+      { wave: 'sawtooth', freq: 156, decay: 0.3, gain: 0.2 },
+    ],
+    scoreEntered: [
+      { wave: 'square', freq: 523, decay: 0.1, gain: 0.16 },
+      { wave: 'square', freq: 659, delay: 0.1, decay: 0.1, gain: 0.16 },
+      { wave: 'square', freq: 784, delay: 0.2, decay: 0.1, gain: 0.16 },
+      { wave: 'square', freq: 1047, delay: 0.3, decay: 0.5, gain: 0.18 },
+      { wave: 'sawtooth', freq: 262, delay: 0.3, decay: 0.5, gain: 0.12 },
     ],
     // A bright two-tone "bling" so the player notices a bonus has appeared.
     bonusDropped: [

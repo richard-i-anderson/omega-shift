@@ -1,6 +1,8 @@
 import { BONUS, SHIP, WORLD } from '../config';
 import type { Game } from '../game';
 import { COLORS, drawShipIcon } from './draw';
+import { drawBoard, drawNameEntry } from './scores';
+import { drawPanel } from './panel';
 
 const FONT = '"Courier New", ui-monospace, monospace';
 
@@ -95,15 +97,21 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, g: Game): void {
     text(ctx, 'OMEGA SHIFT', cx, top, 56, COLORS.field);
     if (blink) text(ctx, 'PRESS ENTER', cx, bottom - 20, 22, COLORS.text);
     text(ctx, '← → ROTATE   ↑ THRUST   SPACE FIRE   H HYPERSPACE   B BOMB   P PAUSE   M SOUND', cx, bottom + 16, 14, COLORS.dimText, 'normal');
+    const best = g.board.best;
+    if (best) text(ctx, `YOUR BEST  ${best.name}  ${best.score}`, cx, bottom + 44, 14, COLORS.field);
     return;
   }
   if (g.state === 'levelClear') {
     if (g.justCleared) text(ctx, 'WAVE CLEARED', cx, top, 30, COLORS.field);
     text(ctx, `LEVEL ${g.levelIndex + 1}  ${g.levelName}`, cx, bottom, 26, COLORS.text);
   }
-  if (g.state === 'gameOver') {
-    text(ctx, 'GAME OVER', cx, top, 48, '#ff4040');
-    if (g.stateTimer <= 0 && blink) text(ctx, 'PRESS ENTER', cx, bottom, 22, COLORS.text);
+  if (g.state === 'gameOver' || g.state === 'enterName') text(ctx, 'GAME OVER', cx, top, 48, '#ff4040');
+  if (g.state === 'enterName') drawNameEntry(ctx, g);
+  if (g.state === 'gameOver' && g.stateTimer <= 0) {
+    // After the banner, the high scores, with this game's entry picked out.
+    drawPanel(ctx, 1, 1);
+    drawBoard(ctx, g.board, g.lastEntry, 1);
+    if (blink) text(ctx, 'PRESS ENTER', cx, bottom, 22, COLORS.text);
   }
   if (g.paused) text(ctx, 'PAUSED', cx, top, 40, COLORS.text);
 }

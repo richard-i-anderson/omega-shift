@@ -1,14 +1,14 @@
 import { ENEMY, WORLD } from '../config';
 import { makeBonus } from '../entities/bonus';
 import { makeMine, type Enemy, type EnemyKind } from '../entities/enemies';
-import { ENEMY_COLORS } from '../game';
-import { welcomeView, WELCOME_PAGES, type WelcomePage } from '../welcome';
+import { ENEMY_COLORS, type Board } from '../game';
+import { welcomeView, WELCOME_PAGES, type EnemyPage, type StoryPage } from '../welcome';
 import { drawBonuses } from './bonus';
-import { COLORS, drawEnemy, haloStroke } from './draw';
-import { textWidth, vectorTextPath } from './vectorFont';
+import { COLORS, drawEnemy } from './draw';
+import { drawPanel, PANEL, typed } from './panel';
+import { drawBoard } from './scores';
+import { textWidth } from './vectorFont';
 
-// The panel sits between the title (y 150) and "PRESS ENTER" (y 598).
-const PANEL = { x: 92, y: 196, w: 840, h: 366 };
 const TITLE_SIZE = 18;
 const STORY_SIZE = 13;
 const STORY_LINE = 24;
@@ -18,28 +18,6 @@ const ROW = 50;
 const ICON_X = 150;
 const TEXT_X = 190;
 const POINTS_RIGHT = 880;
-
-/**
- * Types up to `budget` characters of `text` in the vector font and returns
- * what's left of the budget.
- */
-function typed(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  x: number,
-  y: number,
-  size: number,
-  color: string,
-  alpha: number,
-  budget: number,
-): number {
-  if (budget <= 0 || !text) return budget;
-  const shown = text.slice(0, budget);
-  ctx.beginPath();
-  vectorTextPath(ctx, shown, x, y, size);
-  haloStroke(ctx, color, size > 12 ? 1.6 : 1.3, alpha, 0.8);
-  return budget - text.length;
-}
 
 /** A stand-in enemy for the icon beside a row, turning slowly. */
 function icon(kind: EnemyKind, x: number, y: number, time: number): Enemy {
@@ -51,7 +29,7 @@ function icon(kind: EnemyKind, x: number, y: number, time: number): Enemy {
   return e;
 }
 
-function drawPage(ctx: CanvasRenderingContext2D, page: WelcomePage, chars: number, alpha: number, time: number): void {
+function drawPage(ctx: CanvasRenderingContext2D, page: StoryPage | EnemyPage, chars: number, alpha: number, time: number): void {
   let left = typed(
     ctx,
     page.title,
@@ -98,16 +76,12 @@ function drawPage(ctx: CanvasRenderingContext2D, page: WelcomePage, chars: numbe
  * The welcome text over the title screen, once the game has sat there
  * untouched for a while (see `welcomeView`).
  */
-export function drawWelcome(ctx: CanvasRenderingContext2D, idle: number, time: number): void {
+export function drawWelcome(ctx: CanvasRenderingContext2D, idle: number, time: number, board: Board): void {
   const view = welcomeView(idle);
   if (!view) return;
-  const { x, y, w, h } = PANEL;
-  ctx.globalAlpha = view.alpha * 0.85;
-  ctx.fillStyle = '#000';
-  ctx.fillRect(x, y, w, h);
-  ctx.beginPath();
-  ctx.rect(x, y, w, h);
-  haloStroke(ctx, COLORS.field, 2, view.alpha);
-  drawPage(ctx, WELCOME_PAGES[view.page], view.chars, view.alpha, time);
+  drawPanel(ctx, view.alpha);
+  const page = WELCOME_PAGES[view.page];
+  if (page.kind === 'scores') drawBoard(ctx, board, null, view.alpha);
+  else drawPage(ctx, page, view.chars, view.alpha, time);
   ctx.globalAlpha = 1;
 }

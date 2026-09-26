@@ -196,6 +196,12 @@ export class AudioEngine {
         return this.patch(fx.shieldTick);
       case 'shieldDown':
         return this.patch(fx.shieldDown);
+      case 'nameEdit':
+        return this.patch(fx.nameEdit);
+      case 'nameRejected':
+        return this.patch(fx.nameRejected);
+      case 'scoreEntered':
+        return this.patch(fx.scoreEntered);
       case 'extraLife':
         return this.patch(fx.extraLife);
       case 'waveStart':

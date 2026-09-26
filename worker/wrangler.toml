@@ -1,0 +1,14 @@
+# The Omega Shift high-score API (see docs/DECISIONS.md, High scores).
+# Deploy from this folder: npx wrangler deploy
+name = "omega-shift-scores"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+[vars]
+ALLOWED_ORIGINS = "https://richard-i-anderson.github.io,http://localhost:5173"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "omega-shift-scores"
+# From `npx wrangler d1 create omega-shift-scores` (not a secret).
+database_id = "e9461dc6-6aee-4a82-9123-8759b50beadb"

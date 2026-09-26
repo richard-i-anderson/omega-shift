@@ -7,6 +7,7 @@ import { startLoop } from './loop';
 import { COLORS, drawArena, drawBullets, drawDebug, drawEnemy, drawParticles, drawShip } from './render/draw';
 import { drawHud, drawOverlay, drawShieldBar } from './render/hud';
 import { drawWelcome } from './render/welcome';
+import { fetchTop, loadBest, saveBest, scoresUrl, submitScore } from './scores/client';
 import { drawBonuses, drawPopups } from './render/bonus';
 import { Starfield } from './render/stars';
 import { PerfOverlay } from './render/perf';
@@ -20,6 +21,17 @@ const stars = new Starfield();
 const perf = new PerfOverlay();
 const audio = new AudioEngine();
 audio.attach(window);
+// High scores: this device's best now, the global board when it arrives.
+game.board.best = loadBest();
+function refreshBoard(): void {
+  if (!scoresUrl()) return;
+  fetchTop()
+    .then((top) => (game.board.global = top))
+    .catch(() => (game.board.global = null));
+}
+refreshBoard();
+let lastState = game.state;
+
 // Any key or click puts off the welcome text on the title screen.
 window.addEventListener('keydown', () => game.wake());
 window.addEventListener('pointerdown', () => game.wake());
@@ -60,7 +72,7 @@ function render(alpha: number): void {
   if (game.state !== 'title') drawHud(ctx, game);
   drawShieldBar(ctx, game);
   drawOverlay(ctx, game);
-  if (game.state === 'title') drawWelcome(ctx, game.idle, game.time);
+  if (game.state === 'title') drawWelcome(ctx, game.idle, game.time, game.board);
   if (game.showDebug) drawDebug(ctx, game.arena);
   perf.draw(ctx);
 }
@@ -70,7 +82,19 @@ function drainEvents(): void {
   for (const e of game.events) {
     audio.play(e);
     stars.onEvent(e);
+    if (e.type === 'scoreEntered') {
+      // Game has already made it this device's best if it is.
+      if (game.board.best && game.board.best.score === e.score) saveBest(game.board.best);
+      if (scoresUrl()) {
+        submitScore(e)
+          .then((top) => (game.board.global = top))
+          .catch(() => {}); // the board keeps what it had
+      }
+    }
   }
+  // Back on the title: fetch the board again, so the attract loop is current.
+  if (game.state === 'title' && lastState !== 'title') refreshBoard();
+  lastState = game.state;
   game.events.length = 0;
   const flying = !game.paused && (game.state === 'playing' || game.state === 'levelClear');
   audio.updateAmbient(ambientDanger(game), flying && !!game.ship?.thrusting);
