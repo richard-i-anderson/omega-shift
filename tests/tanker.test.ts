@@ -82,6 +82,7 @@ describe('tankers', () => {
   it('keep launching ships, which count towards the wave, within the ship and hunter caps', () => {
     const { game, tick } = startOn('BAR');
     const start = game.waveSize;
+    game.events.length = 0; // a launch before this is already in `start`
     let launches = 0;
     let maxShips = 0;
     let maxHunters = 0;

@@ -104,7 +104,7 @@ The user saw jittery motion on a display of unknown refresh rate. Measured first
 - **Our own stroke font** instead of a font file: the project has no assets or dependencies, and polylines on a 4×6 grid are exactly what vector arcade lettering was. Zero is slashed so it isn't read as O. The whole page is added to one path per string and drawn with `haloStroke` (no `shadowBlur`, since a page-sized blurred path is expensive; see Performance).
 - **Sprites respect the caller's `globalAlpha`** (`drawEnemy`, `drawBonuses`), so the icons fade with the page. They used to reset it to 1.
 - **Checked in headless Chrome** with a temporary page (since deleted) that renders the title with each page fully typed.
-- **Title screen only.** The game-over screen still waits for Enter without it.
+- **Game over goes back to the title after 15 s** (`GAME_OVER_SEC`), like an arcade cabinet advertising itself once the last player walks away. The enemies blow up, the arena morphs back into the showcase level (SHIFT) and the score glides back to the centre. The welcome text then follows on the title's usual 5 s. Enter still restarts at once during those 15 s. The timer counts from the moment of death and isn't reset by other keys, as on a real cabinet. (First version: the welcome showed on the title only, and game over waited for Enter forever.)
 
 ## Sound
 

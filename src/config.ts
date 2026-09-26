@@ -261,6 +261,10 @@ export const WELCOME = {
   typeRate: 80,
 } as const;
 
+// Like an arcade cabinet left alone, the game-over screen goes back to the
+// title (and its welcome text) after this many seconds.
+export const GAME_OVER_SEC = 15;
+
 export const LEVEL_CLEAR_SEC = 3;
 export const LEVEL_TRANSITION_SEC = 2.5;
 

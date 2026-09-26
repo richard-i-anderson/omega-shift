@@ -21,6 +21,7 @@ import {
   BONUS,
   ENEMY,
   EXPLOSION,
+  GAME_OVER_SEC,
   HYPERSPACE,
   LEVEL_CLEAR_SEC,
   LEVEL_TRANSITION_SEC,
@@ -62,6 +63,8 @@ const DROID_SPAWN_THETA = 0;
 const TANKER_SPAWN_THETAS = [Math.PI / 2, (3 * Math.PI) / 2];
 /** Pixels between droids along the track when a wave spawns. */
 const DROID_SPACING = 50;
+/** The level the title screen shows behind it: the last, which morphs. */
+const SHOWCASE = () => LEVELS[LEVELS.length - 1];
 /** Debug keys that jump to levels 1–9, 10 (`0`) and 11 (`-`). */
 export const LEVEL_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0', 'Minus'];
 const HYPER_COLOR = '#35e0ff';
@@ -112,6 +115,8 @@ export class Game {
   idle = 0;
   /** Ships in the current wave: those it spawned with plus any tankers launched (the sound speeds up as they fall). */
   waveSize = 0;
+  /** Seconds since the game ended; at `GAME_OVER_SEC` it goes back to the title. */
+  private gameOverTime = 0;
   private respawnTimer = 0;
   private promoteTimer = 0;
   private bonusTimer = 0;
@@ -128,7 +133,7 @@ export class Game {
       if (errors.length) console.error(`Level ${lvl.name} is invalid:\n${errors.join('\n')}`);
     }
     // The title screen shows the morphing level in the background.
-    const showcase = LEVELS[LEVELS.length - 1];
+    const showcase = SHOWCASE();
     this.arena = new Arena(WORLD.cx, WORLD.cy, showcase.keyframes, showcase.loop, showcase.motion);
   }
 
@@ -213,7 +218,9 @@ export class Game {
         break;
       case 'gameOver':
         this.updateEnemies(dt);
+        this.gameOverTime += dt;
         if (this.stateTimer <= 0 && input.wasPressed('Enter', 'Space')) this.startGame();
+        else if (this.gameOverTime >= GAME_OVER_SEC) this.returnToTitle();
         break;
     }
     for (const h of this.arena.hits) this.emit({ type: 'fieldHit', impact: h.impact, source: h.source });
@@ -236,6 +243,29 @@ export class Game {
     this.bonuses = [];
     this.nextExtraLife = SCORE.extraLifeEvery;
     this.paused = false;
+  }
+
+  /**
+   * Back to the title after a game nobody restarted, as an arcade cabinet
+   * does: the enemies go, the arena morphs back into the showcase, and the
+   * welcome text follows once it has sat there a while.
+   */
+  private returnToTitle(): void {
+    const showcase = SHOWCASE();
+    for (const e of this.enemies) this.blast(ENEMY_BLAST[e.kind], e.x, e.y, ENEMY_COLORS[e.kind]);
+    this.enemies = [];
+    this.enemyBullets = [];
+    this.bullets = [];
+    this.bonuses = [];
+    this.popups = [];
+    this.arena.setLevel(showcase.keyframes, showcase.loop, LEVEL_TRANSITION_SEC, showcase.motion);
+    this.hudFrom = this.hudPos;
+    this.hudTo = { x: WORLD.cx, y: WORLD.cy };
+    this.hudT = 0;
+    this.hudDur = LEVEL_TRANSITION_SEC;
+    this.state = 'title';
+    this.paused = false;
+    this.idle = 0;
   }
 
   private startGame(): void {
@@ -660,6 +690,7 @@ export class Game {
     if (this.lives <= 0) {
       this.state = 'gameOver';
       this.stateTimer = 1.5;
+      this.gameOverTime = 0;
       this.emit({ type: 'gameOver' });
     } else {
       this.respawnTimer = SHIP.respawnDelay;

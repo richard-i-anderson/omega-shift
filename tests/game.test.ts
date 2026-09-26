@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { GAME_OVER_SEC, WELCOME } from '../src/config';
+import { Bullet } from '../src/entities/bullet';
 import { Game, LEVEL_KEYS } from '../src/game';
+import { welcomeView } from '../src/welcome';
 import type { Input } from '../src/input';
 import { LEVELS } from '../src/levels/levels';
 
@@ -150,6 +153,51 @@ describe('game loop (headless)', () => {
     }
     const s = game.ship!;
     expect(game.arena.chamberAtPoint(s.x, s.y)).toBeGreaterThanOrEqual(0);
+  });
+
+  /** Start on `name` and lose the last life at once. */
+  function gameOverOn(name: string) {
+    const run = startOn(name);
+    const { game, tick } = run;
+    game.lives = 1;
+    const s = game.ship!;
+    s.invuln = 0;
+    game.enemyBullets.push(new Bullet(s.x, s.y, 0, 0, 1));
+    tick(1 / 120);
+    expect(game.state).toBe('gameOver');
+    return run;
+  }
+
+  it('like an arcade cabinet, game over goes back to the title and its welcome text when left alone', () => {
+    const { game, tick } = gameOverOn('STAR');
+    tick(GAME_OVER_SEC - 0.5);
+    expect(game.state).toBe('gameOver');
+    tick(1);
+    expect(game.state).toBe('title');
+    expect(game.enemies).toHaveLength(0);
+    expect(game.bonuses).toHaveLength(0);
+    // The arena morphs back into the title's showcase level, and the score back to the centre.
+    tick(4);
+    const shift = new Game(false);
+    expect(game.arena.outer.radii[0]).toBeCloseTo(shift.arena.outer.radii[0], 0);
+    expect(game.hudPos).toEqual({ x: 512, y: 384 });
+    expect(welcomeView(game.idle)).toBeNull();
+    tick(WELCOME.delay);
+    expect(welcomeView(game.idle)).not.toBeNull();
+  });
+
+  it('Enter on the game-over screen still starts a new game straight away', () => {
+    const { game, input, tick } = gameOverOn('RING');
+    tick(2);
+    input.presses.add('Enter');
+    tick(1 / 120);
+    expect(game.state).toBe('levelClear');
+    expect(game.levelIndex).toBe(0);
+    // The old game's timer is gone: the new game isn't cut short.
+    for (let t = 0; t < GAME_OVER_SEC + 1; t += 0.5) {
+      tick(0.5);
+      expect(game.state).not.toBe('title');
+    }
   });
 
   it('debug keys 0 and - reach levels 10 and 11', () => {
