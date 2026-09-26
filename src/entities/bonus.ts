@@ -3,8 +3,8 @@ import { BONUS } from '../config';
 import { collideArena, type Body } from '../physics/collide';
 import type { EnemyKind } from './enemies';
 
-/** An extra life, a points bonus, or a smart bomb (B kills every enemy). */
-export type BonusKind = 'life' | 'points' | 'bomb';
+/** An extra life, a points bonus, a smart bomb (B kills every enemy), or a shield (invincible for a while). */
+export type BonusKind = 'life' | 'points' | 'bomb' | 'shield';
 
 export interface Bonus extends Body {
   kind: BonusKind;
@@ -22,9 +22,10 @@ export function makeBonus(kind: BonusKind, x: number, y: number): Bonus {
 /** Which bonus a ship of this kind leaves, by the weights in `BONUS`. */
 export function pickBonusKind(from: keyof typeof BONUS.weights, rand: () => number = Math.random): BonusKind {
   const w = BONUS.weights[from];
-  let roll = rand() * (w.points + w.bomb + w.life);
+  let roll = rand() * (w.points + w.bomb + w.life + w.shield);
   if ((roll -= w.life) < 0) return 'life';
   if ((roll -= w.bomb) < 0) return 'bomb';
+  if ((roll -= w.shield) < 0) return 'shield';
   return 'points';
 }
 

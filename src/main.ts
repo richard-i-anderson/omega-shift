@@ -5,7 +5,7 @@ import { ENEMY_COLORS, Game } from './game';
 import { Input } from './input';
 import { startLoop } from './loop';
 import { COLORS, drawArena, drawBullets, drawDebug, drawEnemy, drawParticles, drawShip } from './render/draw';
-import { drawHud, drawOverlay } from './render/hud';
+import { drawHud, drawOverlay, drawShieldBar } from './render/hud';
 import { drawWelcome } from './render/welcome';
 import { drawBonuses, drawPopups } from './render/bonus';
 import { Starfield } from './render/stars';
@@ -58,6 +58,7 @@ function render(alpha: number): void {
   drawParticles(ctx, game.particles, alpha);
   drawPopups(ctx, game.popups, game.time);
   if (game.state !== 'title') drawHud(ctx, game);
+  drawShieldBar(ctx, game);
   drawOverlay(ctx, game);
   if (game.state === 'title') drawWelcome(ctx, game.idle, game.time);
   if (game.showDebug) drawDebug(ctx, game.arena);

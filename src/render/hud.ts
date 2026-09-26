@@ -1,4 +1,4 @@
-import { SHIP, WORLD } from '../config';
+import { BONUS, SHIP, WORLD } from '../config';
 import type { Game } from '../game';
 import { COLORS, drawShipIcon } from './draw';
 
@@ -55,6 +55,34 @@ export function drawHud(ctx: CanvasRenderingContext2D, g: Game): void {
 }
 
 const BOMB_COLOR = '#ffb070';
+
+// The shield timer: a wide bar along the top edge, above every arena.
+const BAR = { x: 362, y: 5, w: 300, h: 10 };
+
+/**
+ * While the ship is shielded, a bar across the top of the screen shows the
+ * time left, with "SHIELD" and the seconds either side. Red and blinking for
+ * the last few seconds.
+ */
+export function drawShieldBar(ctx: CanvasRenderingContext2D, g: Game): void {
+  const left = g.ship?.shield ?? 0;
+  if (left <= 0) return;
+  const low = left <= BONUS.shieldWarn;
+  const color = low ? COLORS.shieldLow : COLORS.shield;
+  const lit = !low || Math.floor(g.time * 8) % 2 === 1;
+  const { x, y, w, h } = BAR;
+  // A black backing, so an arena corner behind it (DIAMOND's tip) doesn't show through.
+  ctx.fillStyle = '#000';
+  ctx.fillRect(x - 3, y - 3, w + 6, h + 6);
+  ctx.strokeStyle = ctx.fillStyle = ctx.shadowColor = color;
+  ctx.shadowBlur = 10;
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(x - 2, y - 2, w + 4, h + 4);
+  if (lit) ctx.fillRect(x, y, w * (left / BONUS.shieldSec), h);
+  ctx.shadowBlur = 0;
+  text(ctx, 'SHIELD', x - 42, y + h / 2 + 1, 13, color);
+  text(ctx, String(Math.ceil(left)).padStart(2, ' '), x + w + 22, y + h / 2 + 1, 14, color);
+}
 
 /** Big messages for the title, level cards, pause and game over. */
 export function drawOverlay(ctx: CanvasRenderingContext2D, g: Game): void {

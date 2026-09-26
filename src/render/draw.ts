@@ -5,7 +5,7 @@ import type { Bullet } from '../entities/bullet';
 import type { Enemy } from '../entities/enemies';
 import { COOL_STEPS, coolStep, paletteList, type Particle } from '../entities/particles';
 import type { Ship } from '../entities/ship';
-import { WORLD } from '../config';
+import { BONUS, WORLD } from '../config';
 import { lerp, TAU } from '../math/vec';
 
 export const COLORS = {
@@ -18,6 +18,8 @@ export const COLORS = {
   text: '#d8f6ff',
   dimText: '#6aa9bb',
   debug: '#ff4fd8',
+  shield: '#5dffd6',
+  shieldLow: '#ff5a5a',
 };
 
 function glow(ctx: CanvasRenderingContext2D, color: string, blur = 8): void {
@@ -172,10 +174,35 @@ export function drawShipIcon(ctx: CanvasRenderingContext2D, x: number, y: number
   poly(ctx, x, y, angle, r, SHIP_SHAPE);
 }
 
+/**
+ * The shield: a pulsing bubble round the ship, and outside it a ring that
+ * runs down clockwise with the time left. It turns red and blinks at the end.
+ */
+function drawShield(ctx: CanvasRenderingContext2D, x: number, y: number, left: number, time: number): void {
+  const low = left <= BONUS.shieldWarn;
+  if (low && Math.floor(time * 8) % 2 === 0) return;
+  const color = low ? COLORS.shieldLow : COLORS.shield;
+  const r = BONUS.shieldRadius * (1 + 0.06 * Math.sin(time * 9));
+  glow(ctx, color, 12);
+  ctx.lineWidth = 2;
+  ctx.globalAlpha = 0.25;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, TAU);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.stroke();
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(x, y, BONUS.shieldRadius + 6, -Math.PI / 2, -Math.PI / 2 + (left / BONUS.shieldSec) * TAU);
+  ctx.stroke();
+  noGlow(ctx);
+}
+
 export function drawShip(ctx: CanvasRenderingContext2D, ship: Ship, time: number, alpha = 1): void {
-  if (ship.invuln > 0 && Math.floor(time * 12) % 2 === 0) return;
   const x = lerp(ship.prevX, ship.x, alpha);
   const y = lerp(ship.prevY, ship.y, alpha);
+  if (ship.shield > 0) drawShield(ctx, x, y, ship.shield, time);
+  else if (ship.invuln > 0 && Math.floor(time * 12) % 2 === 0) return;
   const angle = lerp(ship.prevAngle, ship.angle, alpha);
   ctx.lineWidth = 2;
   if (ship.thrusting && Math.floor(time * 30) % 2 === 0) {

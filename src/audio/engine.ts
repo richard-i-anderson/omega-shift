@@ -192,6 +192,10 @@ export class AudioEngine {
         return this.patch(fx.bonusCollected[e.kind]);
       case 'smartBomb':
         return this.patch(fx.smartBomb);
+      case 'shieldTick':
+        return this.patch(fx.shieldTick);
+      case 'shieldDown':
+        return this.patch(fx.shieldDown);
       case 'extraLife':
         return this.patch(fx.extraLife);
       case 'waveStart':

@@ -226,14 +226,21 @@ export const BONUS = {
   points: 5000,
   // Smart bombs held at most; B sets one off.
   maxBombs: 3,
+  // A shield makes the ship invincible for `shieldSec`: enemy shots vanish
+  // against it and anything it rams blows up (tankers excepted). Its radius
+  // is the bubble's, px. It blinks and beeps over the last `shieldWarn` s.
+  // Another shield resets the timer rather than adding to it.
+  shieldSec: 15,
+  shieldRadius: 22,
+  shieldWarn: 3,
   // What each kind of ship tends to leave: the more dangerous the ship, the
   // better the bonus, so the best ones are the riskiest to fetch.
   weights: {
-    droid: { points: 0.7, bomb: 0.2, life: 0.1 },
-    command: { points: 0.45, bomb: 0.35, life: 0.2 },
-    death: { points: 0.3, bomb: 0.4, life: 0.3 },
+    droid: { points: 0.6, bomb: 0.15, life: 0.1, shield: 0.15 },
+    command: { points: 0.35, bomb: 0.3, life: 0.15, shield: 0.2 },
+    death: { points: 0.25, bomb: 0.3, life: 0.2, shield: 0.25 },
     // A destroyed tanker always leaves one.
-    tanker: { points: 0.2, bomb: 0.4, life: 0.4 },
+    tanker: { points: 0.15, bomb: 0.3, life: 0.3, shield: 0.25 },
   },
   // Collected-bonus text floats up and fades over this many seconds.
   popupLife: 1.4,
@@ -445,6 +452,13 @@ export const SOUND = {
       { wave: 'square', freq: 90, freqEnd: 420, attack: 0.01, decay: 0.22, gain: 0.22, filter: { type: 'lowpass', freq: 2000 } },
       { wave: 'square', freq: 420, delay: 0.2, decay: 0.08, gain: 0.14 },
     ],
+    // The shield's last seconds: a short warning beep each second.
+    shieldTick: [{ wave: 'square', freq: 1320, decay: 0.07, gain: 0.18 }],
+    // The shield failing: a falling, fizzing sweep.
+    shieldDown: [
+      { wave: 'triangle', freq: 1400, freqEnd: 180, decay: 0.45, gain: 0.22 },
+      { wave: 'noise', decay: 0.3, gain: 0.12, filter: { type: 'highpass', freq: 2500 } },
+    ],
     // A bright two-tone "bling" so the player notices a bonus has appeared.
     bonusDropped: [
       { wave: 'square', freq: 1760, decay: 0.06, gain: 0.14 },
@@ -462,6 +476,12 @@ export const SOUND = {
       points: [
         { wave: 'square', freq: 988, decay: 0.05, gain: 0.18 },
         { wave: 'square', freq: 1319, delay: 0.05, decay: 0.25, gain: 0.18 },
+      ],
+      // A shimmering chord that swells up: the shield going on.
+      shield: [
+        { wave: 'triangle', freq: 523, freqEnd: 1047, attack: 0.05, decay: 0.5, gain: 0.2 },
+        { wave: 'square', freq: 659, freqEnd: 1319, attack: 0.05, decay: 0.5, gain: 0.1 },
+        { wave: 'square', freq: 784, freqEnd: 1568, delay: 0.1, attack: 0.05, decay: 0.45, gain: 0.1 },
       ],
       // A power-up sweep.
       bomb: [

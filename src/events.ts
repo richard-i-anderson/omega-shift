@@ -32,6 +32,9 @@ export type GameEvent =
   | { type: 'bonusDropped'; kind: BonusKind; x: number; y: number }
   | { type: 'bonusCollected'; kind: BonusKind; x: number; y: number }
   | { type: 'smartBomb'; x: number; y: number }
+  /** The shield has `left` whole seconds to go (the last few only). */
+  | { type: 'shieldTick'; left: number }
+  | { type: 'shieldDown' }
   | { type: 'extraLife' }
   | { type: 'waveStart' }
   | { type: 'waveCleared' }

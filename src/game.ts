@@ -431,6 +431,7 @@ export class Game {
   private updateShipAndShots(dt: number, input: Input): void {
     const ship = this.ship;
     if (ship) {
+      const shieldBefore = ship.shield;
       ship.update(
         dt,
         {
@@ -440,6 +441,7 @@ export class Game {
         },
         this.arena,
       );
+      this.shieldCountdown(shieldBefore, ship.shield);
       if (input.wasPressed('KeyH') && ship.hyperCooldown <= 0) this.hyperspace(ship);
       // A corridor pinching shut as the arena morphs into a chambered level
       // would crush the ship; jump it clear instead.
@@ -465,6 +467,15 @@ export class Game {
     }
     for (const b of this.bullets) b.update(dt, this.arena);
     this.bullets = this.bullets.filter((b) => !b.dead);
+  }
+
+  /** Beep each second of the shield's last few, and sound it failing. */
+  private shieldCountdown(before: number, after: number): void {
+    if (before <= 0) return;
+    if (after <= 0) this.emit({ type: 'shieldDown' });
+    else if (after <= BONUS.shieldWarn && Math.ceil(after) < Math.ceil(before)) {
+      this.emit({ type: 'shieldTick', left: Math.ceil(after) });
+    }
   }
 
   private updateEnemies(dt: number): void {
@@ -556,9 +567,16 @@ export class Game {
     }
     this.bullets = this.bullets.filter((b) => !b.dead);
 
-    // Anything vs the ship.
+    // Anything vs the ship. A shield swallows shots and destroys whatever it
+    // rams, apart from tankers, which it passes through.
     const ship = this.ship;
-    if (ship && ship.invuln <= 0) {
+    if (ship && ship.shield > 0) {
+      const sr = BONUS.shieldRadius;
+      for (const e of this.enemies) {
+        if (!e.dead && e.kind !== 'tanker' && dist2(ship.x, ship.y, e.x, e.y) < (e.r + sr) ** 2) this.killEnemy(e);
+      }
+      this.enemyBullets = this.enemyBullets.filter((b) => dist2(ship.x, ship.y, b.x, b.y) >= (b.r + sr) ** 2);
+    } else if (ship && ship.invuln <= 0) {
       const hit =
         this.enemies.some((e) => !e.dead && dist2(ship.x, ship.y, e.x, e.y) < (e.r + ship.r * 0.8) ** 2) ||
         this.enemyBullets.some((b) => dist2(ship.x, ship.y, b.x, b.y) < (b.r + ship.r * 0.8) ** 2);
@@ -633,6 +651,9 @@ export class Game {
     } else if (b.kind === 'bomb' && this.bombs < BONUS.maxBombs) {
       this.bombs++;
       text = 'SMART BOMB';
+    } else if (b.kind === 'shield' && this.ship) {
+      this.ship.shield = BONUS.shieldSec; // a fresh shield, not an extra 15 s
+      text = 'SHIELD';
     } else {
       // Points, or a life or bomb the player has no room for.
       this.addScore(BONUS.points);

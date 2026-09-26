@@ -15,6 +15,8 @@ export class Ship implements Body {
   thrusting = false;
   cooldown = 0;
   hyperCooldown = 0;
+  /** Seconds of shield left: while above 0 nothing can kill the ship. */
+  shield = 0;
   /** Position and heading before the latest step, for drawing in between steps. */
   prevX: number;
   prevY: number;
@@ -60,6 +62,7 @@ export class Ship implements Body {
     this.cooldown = Math.max(0, this.cooldown - dt);
     this.hyperCooldown = Math.max(0, this.hyperCooldown - dt);
     this.invuln = Math.max(0, this.invuln - dt);
+    this.shield = Math.max(0, this.shield - dt);
   }
 
   /** Nose position, where bullets spawn. */

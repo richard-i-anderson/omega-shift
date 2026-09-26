@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BONUS, MAX_LIVES, SCORE } from '../src/config';
-import { makeBonus, pickBonusKind, updateBonus } from '../src/entities/bonus';
+import { makeBonus, pickBonusKind, updateBonus, type BonusKind } from '../src/entities/bonus';
 import { Game, LEVEL_KEYS } from '../src/game';
 import type { Input } from '../src/input';
 import { LEVELS } from '../src/levels/levels';
@@ -36,7 +36,7 @@ function startOn(name = 'CLASSIC') {
 }
 
 /** Drop a bonus right on the ship and step once, so it's collected. */
-function collectOnShip(game: Game, tick: (s: number) => void, kind: 'life' | 'points' | 'bomb') {
+function collectOnShip(game: Game, tick: (s: number) => void, kind: BonusKind) {
   const s = game.ship!;
   game.dropBonus(kind, s.x, s.y);
   tick(1 / 120);

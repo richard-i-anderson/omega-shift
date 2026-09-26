@@ -1,5 +1,5 @@
 import { BONUS } from '../config';
-import type { Bonus } from '../entities/bonus';
+import type { Bonus, BonusKind } from '../entities/bonus';
 import type { Popup } from '../game';
 import { lerp, TAU } from '../math/vec';
 import { drawShipIcon } from './draw';
@@ -7,7 +7,15 @@ import { drawShipIcon } from './draw';
 // Bonuses must read as "collect me" at a glance, so they're the only round,
 // rainbow-cycling things in the game: enemies are angular and one colour each.
 
-const GLYPH_COLOR = { life: '#eaffd0', points: '#ffe9a0', bomb: '#ffd0c0' } as const;
+const GLYPH_COLOR: Record<BonusKind, string> = { life: '#eaffd0', points: '#ffe9a0', bomb: '#ffd0c0', shield: '#c8fff0' };
+/** A heater shield, in units of the glyph's size. */
+const SHIELD_GLYPH = [
+  [-0.8, -0.9],
+  [0.8, -0.9],
+  [0.8, 0],
+  [0, 1],
+  [-0.8, 0],
+];
 const FONT = '"Courier New", ui-monospace, monospace';
 
 const hue = (time: number, offset: number) => `hsl(${(time * 220 + offset) % 360}, 100%, 62%)`;
@@ -53,6 +61,15 @@ export function drawBonuses(ctx: CanvasRenderingContext2D, bonuses: Bonus[], tim
     if (b.kind === 'life') {
       ctx.lineWidth = 1.6;
       drawShipIcon(ctx, x, y + 1, -Math.PI / 2, r * 0.55);
+    } else if (b.kind === 'shield') {
+      ctx.lineWidth = 1.8;
+      const k = r * 0.5;
+      ctx.beginPath();
+      SHIELD_GLYPH.forEach(([gx, gy], n) => (n ? ctx.lineTo(x + gx * k, y + gy * k) : ctx.moveTo(x + gx * k, y + gy * k)));
+      ctx.closePath();
+      ctx.moveTo(x, y - 0.9 * k);
+      ctx.lineTo(x, y + k);
+      ctx.stroke();
     } else {
       ctx.font = `bold ${Math.round(r * 1.3)}px ${FONT}`;
       ctx.textAlign = 'center';

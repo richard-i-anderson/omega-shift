@@ -80,7 +80,7 @@ export const WELCOME_PAGES: readonly WelcomePage[] = [
         icon: 'bonus',
         name: 'BONUSES',
         points: '',
-        text: 'FLY THROUGH FOR AN EXTRA LIFE, POINTS OR A SMART BOMB.',
+        text: 'FLY THROUGH: EXTRA LIFE, POINTS, SMART BOMB OR SHIELD.',
       },
     ],
   },
