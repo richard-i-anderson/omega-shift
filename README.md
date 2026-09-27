@@ -2,7 +2,7 @@
 
 **A vector-arcade shooter in the browser, inspired by 1981's *Omega Race*, where the force fields won't keep still.**
 
-▶ **Play it: https://richard-i-anderson.github.io/omega-shift/** (keyboard required)
+▶ **Play it: https://richard-i-anderson.github.io/omega-shift/** (keyboard, or on-screen controls on phones and tablets)
 
 <table>
   <tr>

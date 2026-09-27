@@ -326,6 +326,19 @@ export class Game {
     }
   }
 
+  /**
+   * A tap on a name slot's arrows (touch screens): select the slot and step
+   * its letter up or down, the same as the arrow keys would.
+   */
+  nameTap(slot: number, dir: 1 | -1): void {
+    if (this.state !== 'enterName' || slot < 0 || slot >= NAME_LEN) return;
+    this.nameCursor = slot;
+    const i = NAME_CHARS.indexOf(this.nameSlots[slot]);
+    this.nameSlots[slot] = NAME_CHARS[(i + dir + NAME_CHARS.length) % NAME_CHARS.length];
+    this.entryIdle = 0;
+    this.emit({ type: 'nameEdit' });
+  }
+
   private acceptName(name: string): void {
     const entry: ScoreEntry = { name, score: this.score, level: this.levelIndex + 1 };
     this.lastEntry = entry;
@@ -546,6 +559,7 @@ export class Game {
           left: input.isDown('ArrowLeft', 'KeyA'),
           right: input.isDown('ArrowRight', 'KeyD'),
           thrust: input.isDown('ArrowUp', 'KeyW'),
+          aim: input.aim,
         },
         this.arena,
       );

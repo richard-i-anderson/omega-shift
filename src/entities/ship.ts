@@ -1,11 +1,18 @@
 import type { Arena } from '../arena/arena';
 import { SHIP } from '../config';
+import { clamp, normAngle, TAU } from '../math/vec';
 import { collideArena, type Body } from '../physics/collide';
 
 export interface ShipControls {
   left: boolean;
   right: boolean;
   thrust: boolean;
+  /**
+   * A heading to turn towards (the touch stick), at the same rate as holding
+   * left or right, so touch and keyboard players turn equally fast. Null or
+   * absent: use left and right.
+   */
+  aim?: number | null;
 }
 
 export class Ship implements Body {
@@ -41,8 +48,16 @@ export class Ship implements Body {
   }
 
   update(dt: number, c: ShipControls, arena: Arena): void {
-    if (c.left) this.angle -= SHIP.turnRate * dt;
-    if (c.right) this.angle += SHIP.turnRate * dt;
+    if (c.aim != null) {
+      // The shortest way round to the aim, no faster than the keys turn.
+      let d = normAngle(c.aim - this.angle);
+      if (d > Math.PI) d -= TAU;
+      const step = SHIP.turnRate * dt;
+      this.angle += clamp(d, -step, step);
+    } else {
+      if (c.left) this.angle -= SHIP.turnRate * dt;
+      if (c.right) this.angle += SHIP.turnRate * dt;
+    }
     this.thrusting = c.thrust;
     if (c.thrust) {
       this.vx += Math.cos(this.angle) * SHIP.thrust * dt;

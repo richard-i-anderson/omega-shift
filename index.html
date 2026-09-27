@@ -2,16 +2,20 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
     <title>Omega Shift</title>
     <style>
       html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
-      body { display: flex; align-items: center; justify-content: center; }
-      canvas { display: block; }
+      canvas { display: block; position: absolute; }
+      /* On-screen controls: over everything, shown once the screen is touched. */
+      #touch { left: 0; top: 0; touch-action: none; display: none; }
+      body.touch { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+      body.touch #touch { display: block; }
     </style>
   </head>
   <body>
     <canvas id="game"></canvas>
+    <canvas id="touch"></canvas>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

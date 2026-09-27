@@ -10,6 +10,8 @@ import { drawWelcome } from './render/welcome';
 import { fetchTop, loadBest, saveBest, scoresUrl, submitScore } from './scores/client';
 import { drawBonuses, drawPopups } from './render/bonus';
 import { Starfield } from './render/stars';
+import { TouchControls } from './touch/controls';
+import { computeLayout } from './touch/layout';
 import { PerfOverlay } from './render/perf';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
@@ -36,16 +38,68 @@ let lastState = game.state;
 window.addEventListener('keydown', () => game.wake());
 window.addEventListener('pointerdown', () => game.wake());
 
-// Letterbox the fixed logical world into the window, at device resolution.
+// On-screen controls: off until the screen is touched, off again if a key is pressed.
+const touchCanvas = document.getElementById('touch') as HTMLCanvasElement;
+const touchCtx = touchCanvas.getContext('2d')!;
+const touch = new TouchControls(
+  input,
+  game,
+  () => audio.toggleMute(),
+  () => audio.muted,
+);
+let touchMode = false;
+function setTouchMode(on: boolean): void {
+  if (on === touchMode) return;
+  touchMode = on;
+  document.body.classList.toggle('touch', on);
+  if (!on) touch.release();
+  resize();
+}
+window.addEventListener(
+  'pointerdown',
+  (e) => {
+    if (e.pointerType !== 'touch' || touchMode) return;
+    setTouchMode(true);
+    touch.down(e.pointerId, e.clientX, e.clientY); // the first touch counts too
+  },
+  true,
+);
+window.addEventListener('keydown', (e) => {
+  if (touchMode && !e.repeat && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'Space', 'Enter'].includes(e.code)) setTouchMode(false);
+});
+touchCanvas.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  touchCanvas.setPointerCapture(e.pointerId);
+  touch.down(e.pointerId, e.clientX, e.clientY);
+});
+touchCanvas.addEventListener('pointermove', (e) => touch.move(e.pointerId, e.clientX, e.clientY));
+for (const type of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) {
+  touchCanvas.addEventListener(type, (e) => touch.up(e.pointerId));
+}
+touchCanvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// Letterbox the fixed logical world into the window at device resolution,
+// leaving room for the on-screen controls when they're showing.
 let scale = 1;
+let dpr = 1;
 function resize(): void {
-  const dpr = window.devicePixelRatio || 1;
-  scale = Math.min(window.innerWidth / WORLD.w, window.innerHeight / WORLD.h);
-  canvas.style.width = `${Math.floor(WORLD.w * scale)}px`;
-  canvas.style.height = `${Math.floor(WORLD.h * scale)}px`;
-  canvas.width = Math.floor(WORLD.w * scale * dpr);
-  canvas.height = Math.floor(WORLD.h * scale * dpr);
-  scale *= dpr;
+  dpr = window.devicePixelRatio || 1;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const layout = computeLayout(w, h, touchMode);
+  touch.layout = layout;
+  const g = layout.game;
+  canvas.style.left = `${Math.round(g.x)}px`;
+  canvas.style.top = `${Math.round(g.y)}px`;
+  canvas.style.width = `${Math.floor(g.w)}px`;
+  canvas.style.height = `${Math.floor(g.h)}px`;
+  canvas.width = Math.floor(g.w * dpr);
+  canvas.height = Math.floor(g.h * dpr);
+  scale = (Math.floor(g.w) / WORLD.w) * dpr;
+  touchCanvas.style.width = `${w}px`;
+  touchCanvas.style.height = `${h}px`;
+  touchCanvas.width = Math.floor(w * dpr);
+  touchCanvas.height = Math.floor(h * dpr);
 }
 window.addEventListener('resize', resize);
 resize();
@@ -71,10 +125,14 @@ function render(alpha: number): void {
   drawPopups(ctx, game.popups, game.time);
   if (game.state !== 'title') drawHud(ctx, game);
   drawShieldBar(ctx, game);
-  drawOverlay(ctx, game);
+  drawOverlay(ctx, game, touchMode);
   if (game.state === 'title') drawWelcome(ctx, game.idle, game.time, game.board);
   if (game.showDebug) drawDebug(ctx, game.arena);
   perf.draw(ctx);
+  if (touchMode) {
+    touchCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    touch.draw(touchCtx, window.innerWidth, window.innerHeight);
+  }
 }
 
 /** Hand what happened since the last frame to sound and the starfield; set the background pulse and thrust rumble. */

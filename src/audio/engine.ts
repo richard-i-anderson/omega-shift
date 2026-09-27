@@ -75,6 +75,9 @@ export class AudioEngine {
     const unlock = () => this.unlock();
     win.addEventListener('keydown', unlock);
     win.addEventListener('pointerdown', unlock);
+    // Touch screens only count a touch as permission for sound when it ends.
+    win.addEventListener('pointerup', unlock);
+    win.addEventListener('touchend', unlock);
     win.document.addEventListener('visibilitychange', () => {
       if (!this.ctx) return;
       if (win.document.hidden) void this.ctx.suspend();
